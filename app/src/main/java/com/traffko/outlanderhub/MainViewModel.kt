@@ -28,7 +28,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         // Apply the persisted data source on startup and whenever it changes.
         viewModelScope.launch {
-            settingsRepo.settings.collect { vehicles.setSource(it.source) }
+            settings.collect { vehicles.setSource(it.source) }
         }
     }
 

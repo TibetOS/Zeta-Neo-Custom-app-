@@ -3,6 +3,8 @@ package com.traffko.outlanderhub.apps
 import android.content.Context
 import android.content.Intent
 import android.graphics.drawable.Drawable
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 data class LaunchableApp(
     val label: String,
@@ -13,10 +15,10 @@ data class LaunchableApp(
 class InstalledAppsRepository(private val context: Context) {
 
     /** All launchable apps except ourselves, sorted by label. */
-    fun loadApps(): List<LaunchableApp> {
+    suspend fun loadApps(): List<LaunchableApp> = withContext(Dispatchers.IO) {
         val pm = context.packageManager
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        return pm.queryIntentActivities(intent, 0)
+        pm.queryIntentActivities(intent, 0)
             .asSequence()
             .filter { it.activityInfo.packageName != context.packageName }
             .map {

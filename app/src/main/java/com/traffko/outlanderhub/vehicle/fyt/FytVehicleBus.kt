@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.os.IBinder
+import android.os.RemoteException
 import android.util.Log
 import com.syu.ipc.IModuleCallback
 import com.syu.ipc.IRemoteModule
@@ -15,6 +16,10 @@ import com.traffko.outlanderhub.vehicle.DoorState
 import com.traffko.outlanderhub.vehicle.VehicleBus
 import com.traffko.outlanderhub.vehicle.VehicleSource
 import com.traffko.outlanderhub.vehicle.VehicleState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -22,6 +27,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 private const val TAG = "FytVehicleBus"
 
@@ -42,9 +49,12 @@ class FytVehicleBus(private val context: Context) : VehicleBus {
     private val _events = MutableSharedFlow<BusEvent>(extraBufferCapacity = 512)
     override val events: SharedFlow<BusEvent> = _events.asSharedFlow()
 
-    private var toolkit: IRemoteToolkit? = null
-    private var canModule: IRemoteModule? = null
-    private var bound = false
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var registrationJob: Job? = null
+
+    @Volatile private var toolkit: IRemoteToolkit? = null
+    @Volatile private var canModule: IRemoteModule? = null
+    @Volatile private var bound = false
 
     private val callback = object : IModuleCallback.Stub() {
         override fun update(updateCode: Int, ints: IntArray?, flts: FloatArray?, strs: Array<String>?) {
@@ -65,6 +75,11 @@ class FytVehicleBus(private val context: Context) : VehicleBus {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             Log.i(TAG, "Toolkit service connected: $name")
             emitInfo("service connected: $name")
+            if (!bound) {
+                // stop() already ran — don't touch the connection.
+                Log.w(TAG, "onServiceConnected after stop(); ignoring")
+                return
+            }
             try {
                 toolkit = IRemoteToolkit.Stub.asInterface(service)
                 val module = toolkit?.getRemoteModule(FytProtocol.MODULE_CANBUS)
@@ -73,16 +88,25 @@ class FytVehicleBus(private val context: Context) : VehicleBus {
                     emitInfo("getRemoteModule(CANBUS) returned null")
                     return
                 }
-                var registered = 0
-                for (code in FytProtocol.CAN_SUBSCRIBE_FROM..FytProtocol.CAN_SUBSCRIBE_TO) {
-                    try {
-                        module.register(callback, code, 1)
-                        registered++
-                    } catch (e: Exception) {
-                        Log.w(TAG, "register($code) failed", e)
+                // 256 binder round-trips — keep them off the main thread.
+                registrationJob?.cancel()
+                registrationJob = scope.launch {
+                    var registered = 0
+                    for (code in FytProtocol.CAN_SUBSCRIBE_FROM..FytProtocol.CAN_SUBSCRIBE_TO) {
+                        if (!isActive) return@launch
+                        try {
+                            module.register(callback, code, 1)
+                            registered++
+                        } catch (e: RemoteException) {
+                            Log.e(TAG, "Service died during registration", e)
+                            emitInfo("service died during registration at code=$code")
+                            return@launch
+                        } catch (e: Exception) {
+                            Log.w(TAG, "register($code) failed", e)
+                        }
                     }
+                    emitInfo("registered for $registered CAN update codes")
                 }
-                emitInfo("registered for $registered CAN update codes")
                 _state.update { it.copy(connected = true) }
             } catch (e: Exception) {
                 Log.e(TAG, "Toolkit handshake failed", e)
@@ -119,20 +143,28 @@ class FytVehicleBus(private val context: Context) : VehicleBus {
 
     override fun stop() {
         if (!bound) return
-        try {
-            val module = canModule
-            if (module != null) {
-                for (code in FytProtocol.CAN_SUBSCRIBE_FROM..FytProtocol.CAN_SUBSCRIBE_TO) {
-                    runCatching { module.unregister(callback, code) }
-                }
-            }
-            context.unbindService(connection)
-        } catch (e: Exception) {
-            Log.w(TAG, "stop() cleanup failed", e)
-        }
         bound = false
+        registrationJob?.cancel()
+        registrationJob = null
+        val module = canModule
         toolkit = null
         canModule = null
+        // Unregister is another burst of binder calls — do it (and the unbind
+        // that must follow it) off the main thread.
+        scope.launch {
+            if (module != null) {
+                for (code in FytProtocol.CAN_SUBSCRIBE_FROM..FytProtocol.CAN_SUBSCRIBE_TO) {
+                    try {
+                        module.unregister(callback, code)
+                    } catch (e: RemoteException) {
+                        break
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+            runCatching { context.unbindService(connection) }
+                .onFailure { Log.w(TAG, "unbindService failed", it) }
+        }
         _state.update { it.copy(connected = false) }
     }
 

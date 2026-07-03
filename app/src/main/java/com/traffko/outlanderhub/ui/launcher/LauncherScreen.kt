@@ -21,7 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -51,7 +51,7 @@ fun LauncherScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
     var apps by remember { mutableStateOf<List<LaunchableApp>>(emptyList()) }
     LaunchedEffect(Unit) { apps = appsRepo.loadApps() }
 
-    val vehicle by viewModel.vehicleState.collectAsState()
+    val vehicle by viewModel.vehicleState.collectAsStateWithLifecycle()
 
     Column(modifier) {
         // Top strip: clock + quick vehicle status

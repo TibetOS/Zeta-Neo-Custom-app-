@@ -21,7 +21,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,11 +45,14 @@ import java.util.Locale
  */
 @Composable
 fun DiagnosticsScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
-    val log by viewModel.eventLog.collectAsState()
+    val log by viewModel.eventLog.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
+    val dateFormatter = remember { SimpleDateFormat("HH:mm:ss.SSS", Locale.US) }
 
+    // Instant (non-animated) scroll: overlapping animations freeze the UI
+    // when the CAN bus is chatty.
     LaunchedEffect(log.size) {
-        if (log.isNotEmpty()) listState.animateScrollToItem(log.lastIndex)
+        if (log.isNotEmpty()) listState.scrollToItem(log.lastIndex)
     }
 
     Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -72,8 +75,7 @@ fun DiagnosticsScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
         ) {
             LazyColumn(state = listState, modifier = Modifier.padding(12.dp)) {
                 items(log) { event ->
-                    val time = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
-                        .format(Date(event.timestampMs))
+                    val time = dateFormatter.format(Date(event.timestampMs))
                     Text(
                         "$time  ${event.pretty()}",
                         fontFamily = FontFamily.Monospace,

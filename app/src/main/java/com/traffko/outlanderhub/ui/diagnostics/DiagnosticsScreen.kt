@@ -48,6 +48,9 @@ fun DiagnosticsScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
     val log by viewModel.eventLog.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val dateFormatter = remember { SimpleDateFormat("HH:mm:ss.SSS", Locale.US) }
+    // Reused per row: only visible rows are composed, and reusing one Date
+    // keeps a chatty bus from generating allocation churn while scrolling.
+    val scratchDate = remember { Date() }
 
     // Instant (non-animated) scroll: overlapping animations freeze the UI
     // when the CAN bus is chatty.
@@ -73,7 +76,8 @@ fun DiagnosticsScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                 .padding(horizontal = 16.dp, vertical = 12.dp),
         ) {
             items(log) { event ->
-                val time = dateFormatter.format(Date(event.timestampMs))
+                scratchDate.time = event.timestampMs
+                val time = dateFormatter.format(scratchDate)
                 Text(
                     "$time  ${event.pretty()}",
                     fontFamily = FontFamily.Monospace,

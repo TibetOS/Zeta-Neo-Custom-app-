@@ -5,6 +5,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -35,6 +36,11 @@ fun CarTopView(doors: DoorState, modifier: Modifier = Modifier) {
     val trunk by doorAnim(doors.trunk)
     val hood by doorAnim(doors.hood)
 
+    // Reused across frames: the door-swing animation redraws every frame, and
+    // allocating Paths inside DrawScope would churn the GC on the head unit.
+    val bodyPath = remember { Path() }
+    val bandPath = remember { Path() }
+
     Canvas(modifier) {
         val carL = size.height * 0.92f
         val carW = minOf(size.width * 0.46f, carL * 0.46f)
@@ -42,32 +48,18 @@ fun CarTopView(doors: DoorState, modifier: Modifier = Modifier) {
         val left = (size.width - carW) / 2f
         val right = left + carW
 
-        // Wheel stubs peeking out from the body
+        // Wheel stubs peeking out from the body (drawn one by one — no
+        // per-frame list allocations in the render loop)
         val wheelW = carW * 0.14f
         val wheelH = carL * 0.13f
-        listOf(
-            Offset(left - wheelW * 0.62f, top + carL * 0.14f),
-            Offset(right - wheelW * 0.38f, top + carL * 0.14f),
-            Offset(left - wheelW * 0.62f, top + carL * 0.64f),
-            Offset(right - wheelW * 0.38f, top + carL * 0.64f),
-        ).forEach { o ->
-            drawRoundRect(
-                color = Color(0xFF0C0E11),
-                topLeft = o,
-                size = Size(wheelW, wheelH),
-                cornerRadius = CornerRadius(wheelW * 0.45f),
-            )
-            drawRoundRect(
-                color = Hue.Hairline,
-                topLeft = o,
-                size = Size(wheelW, wheelH),
-                cornerRadius = CornerRadius(wheelW * 0.45f),
-                style = Stroke(width = 1.2f),
-            )
-        }
+        drawWheelStub(Offset(left - wheelW * 0.62f, top + carL * 0.14f), wheelW, wheelH)
+        drawWheelStub(Offset(right - wheelW * 0.38f, top + carL * 0.14f), wheelW, wheelH)
+        drawWheelStub(Offset(left - wheelW * 0.62f, top + carL * 0.64f), wheelW, wheelH)
+        drawWheelStub(Offset(right - wheelW * 0.38f, top + carL * 0.64f), wheelW, wheelH)
 
         // Body silhouette — softer nose, squarer tail
-        val body = Path().apply {
+        val body = bodyPath.apply {
+            reset()
             addRoundRect(
                 RoundRect(
                     rect = Rect(left, top, right, top + carL),
@@ -109,24 +101,26 @@ fun CarTopView(doors: DoorState, modifier: Modifier = Modifier) {
 
         // Glass: windshield, roof, rear window
         val glass = Color(0xFF0B0D10)
-        drawGlassBand(glass, left, right, top + carL * 0.24f, top + carL * 0.34f, carW, taperTop = 0.16f)
+        drawGlassBand(bandPath, glass, left, right, top + carL * 0.24f, top + carL * 0.34f, carW, taperTop = 0.16f)
         drawRoundRect(
             color = Color(0xFF101318),
             topLeft = Offset(left + carW * 0.12f, top + carL * 0.36f),
             size = Size(carW * 0.76f, carL * 0.36f),
             cornerRadius = CornerRadius(carW * 0.14f),
         )
-        drawGlassBand(glass, left, right, top + carL * 0.74f, top + carL * 0.81f, carW, taperTop = -0.1f)
+        drawGlassBand(bandPath, glass, left, right, top + carL * 0.74f, top + carL * 0.81f, carW, taperTop = -0.1f)
 
-        // Door seams
+        // Door seams (unrolled: no per-frame list allocations)
         val seamColor = Color(0x33FFFFFF)
         val seamFront = top + carL * 0.335f
         val seamMid = top + carL * 0.52f
         val seamRear = top + carL * 0.70f
-        listOf(seamFront, seamMid, seamRear).forEach { y ->
-            drawLine(seamColor, Offset(left, y), Offset(left + carW * 0.10f, y), strokeWidth = 1.4f)
-            drawLine(seamColor, Offset(right - carW * 0.10f, y), Offset(right, y), strokeWidth = 1.4f)
-        }
+        drawLine(seamColor, Offset(left, seamFront), Offset(left + carW * 0.10f, seamFront), strokeWidth = 1.4f)
+        drawLine(seamColor, Offset(right - carW * 0.10f, seamFront), Offset(right, seamFront), strokeWidth = 1.4f)
+        drawLine(seamColor, Offset(left, seamMid), Offset(left + carW * 0.10f, seamMid), strokeWidth = 1.4f)
+        drawLine(seamColor, Offset(right - carW * 0.10f, seamMid), Offset(right, seamMid), strokeWidth = 1.4f)
+        drawLine(seamColor, Offset(left, seamRear), Offset(left + carW * 0.10f, seamRear), strokeWidth = 1.4f)
+        drawLine(seamColor, Offset(right - carW * 0.10f, seamRear), Offset(right, seamRear), strokeWidth = 1.4f)
 
         // Mirrors
         val mirrorY = top + carL * 0.30f
@@ -160,7 +154,24 @@ private fun doorAnim(open: Boolean) = animateFloatAsState(
     label = "door",
 )
 
+private fun DrawScope.drawWheelStub(topLeft: Offset, wheelW: Float, wheelH: Float) {
+    drawRoundRect(
+        color = Color(0xFF0C0E11),
+        topLeft = topLeft,
+        size = Size(wheelW, wheelH),
+        cornerRadius = CornerRadius(wheelW * 0.45f),
+    )
+    drawRoundRect(
+        color = Hue.Hairline,
+        topLeft = topLeft,
+        size = Size(wheelW, wheelH),
+        cornerRadius = CornerRadius(wheelW * 0.45f),
+        style = Stroke(width = 1.2f),
+    )
+}
+
 private fun DrawScope.drawGlassBand(
+    path: Path,
     color: Color,
     left: Float,
     right: Float,
@@ -171,13 +182,12 @@ private fun DrawScope.drawGlassBand(
 ) {
     val inset = carW * 0.10f
     val taper = carW * taperTop
-    val path = Path().apply {
-        moveTo(left + inset + taper, yTop)
-        lineTo(right - inset - taper, yTop)
-        lineTo(right - inset, yBottom)
-        lineTo(left + inset, yBottom)
-        close()
-    }
+    path.reset()
+    path.moveTo(left + inset + taper, yTop)
+    path.lineTo(right - inset - taper, yTop)
+    path.lineTo(right - inset, yBottom)
+    path.lineTo(left + inset, yBottom)
+    path.close()
     drawPath(path, color)
 }
 

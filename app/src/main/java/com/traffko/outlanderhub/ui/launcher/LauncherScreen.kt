@@ -65,14 +65,6 @@ fun LauncherScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
 
     val vehicle by viewModel.vehicleState.collectAsStateWithLifecycle()
 
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            now = System.currentTimeMillis()
-            delay(1000)
-        }
-    }
-
     Row(modifier) {
         // Left: clock + vehicle glance
         Column(
@@ -81,19 +73,7 @@ fun LauncherScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                 .fillMaxHeight()
                 .padding(top = 18.dp, bottom = 20.dp),
         ) {
-            Text(
-                SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(now)),
-                fontSize = 92.sp,
-                fontWeight = FontWeight.ExtraLight,
-                letterSpacing = (-2).sp,
-                color = Hue.TextPrimary,
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(Date(now)),
-                fontSize = 16.sp,
-                color = Hue.TextSecondary,
-            )
+            Clock()
 
             Spacer(Modifier.height(34.dp))
 
@@ -154,6 +134,42 @@ fun LauncherScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
             }
         }
     }
+}
+
+/**
+ * Self-contained ticking clock: keeps the once-per-second recomposition (and
+ * the date formatting) local to these two Texts instead of the whole screen,
+ * and reuses the formatters and Date across ticks.
+ */
+@Composable
+private fun Clock() {
+    val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    val dateFormatter = remember { SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()) }
+    val scratchDate = remember { Date() }
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            now = System.currentTimeMillis()
+            delay(1000)
+        }
+    }
+    val (timeText, dateText) = remember(now) {
+        scratchDate.time = now
+        timeFormatter.format(scratchDate) to dateFormatter.format(scratchDate)
+    }
+    Text(
+        timeText,
+        fontSize = 92.sp,
+        fontWeight = FontWeight.ExtraLight,
+        letterSpacing = (-2).sp,
+        color = Hue.TextPrimary,
+    )
+    Spacer(Modifier.height(2.dp))
+    Text(
+        dateText,
+        fontSize = 16.sp,
+        color = Hue.TextSecondary,
+    )
 }
 
 @Composable

@@ -20,9 +20,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
@@ -95,7 +95,9 @@ fun PulseDot(color: Color, modifier: Modifier = Modifier, size: Dp = 8.dp) {
     Box(
         modifier
             .size(size)
-            .alpha(alpha)
+            // Lambda graphicsLayer defers the animated read to the draw phase
+            // so the infinite pulse never recomposes the caller.
+            .graphicsLayer { this.alpha = alpha }
             .clip(CircleShape)
             .background(color)
     )

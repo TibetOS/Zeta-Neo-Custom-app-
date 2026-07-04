@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -170,7 +171,9 @@ private fun TeslaSwitch(checked: Boolean, onToggle: (Boolean) -> Unit) {
     ) {
         Box(
             Modifier
-                .offset(x = knobOffset)
+                // Lambda offset defers the animated read to the layout phase,
+                // so the knob glides without recomposing the switch each frame.
+                .offset { IntOffset(knobOffset.roundToPx(), 0) }
                 .align(Alignment.CenterStart)
                 .size(25.dp)
                 .clip(CircleShape)

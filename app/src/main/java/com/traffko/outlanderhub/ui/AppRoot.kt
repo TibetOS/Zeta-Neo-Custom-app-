@@ -40,6 +40,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -152,13 +153,12 @@ private fun DockItem(screen: Screen, selected: Boolean, onClick: () -> Unit) {
         verticalArrangement = Arrangement.Center,
         modifier = Modifier
             .width(108.dp)
-            .fillMaxWidth()
             .pressable(onClick),
     ) {
         Icon(
             screen.icon,
             contentDescription = screen.label,
-            tint = lerpColor(Hue.TextTertiary, Hue.TextPrimary, emphasis),
+            tint = lerp(Hue.TextTertiary, Hue.TextPrimary, emphasis),
             modifier = Modifier
                 .size(30.dp)
                 .scale(1f + 0.12f * emphasis),
@@ -169,7 +169,7 @@ private fun DockItem(screen: Screen, selected: Boolean, onClick: () -> Unit) {
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
             letterSpacing = 1.5.sp,
-            color = lerpColor(Hue.TextTertiary, Hue.TextSecondary, emphasis),
+            color = lerp(Hue.TextTertiary, Hue.TextSecondary, emphasis),
         )
         Spacer(Modifier.height(6.dp))
         Box(
@@ -187,9 +187,3 @@ private fun DockItem(screen: Screen, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
-private fun lerpColor(a: Color, b: Color, t: Float): Color = Color(
-    red = a.red + (b.red - a.red) * t,
-    green = a.green + (b.green - a.green) * t,
-    blue = a.blue + (b.blue - a.blue) * t,
-    alpha = a.alpha + (b.alpha - a.alpha) * t,
-)

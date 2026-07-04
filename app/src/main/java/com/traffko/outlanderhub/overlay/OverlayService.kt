@@ -11,7 +11,11 @@ import android.os.IBinder
 import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
+import android.view.MotionEvent
+import android.view.View
+import android.view.ViewConfiguration
 import android.view.WindowManager
+import android.widget.FrameLayout
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -30,6 +34,7 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.traffko.outlanderhub.OutlanderApp
 import com.traffko.outlanderhub.R
 import com.traffko.outlanderhub.ui.theme.OutlanderHubTheme
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private const val TAG = "OverlayService"
@@ -44,7 +49,7 @@ private const val TAG = "OverlayService"
 class OverlayService : Service() {
 
     private lateinit var windowManager: WindowManager
-    private var overlayView: ComposeView? = null
+    private var overlayView: View? = null
     private var layoutParams: WindowManager.LayoutParams? = null
     private var viewOwner: OverlayViewOwner? = null
 
@@ -112,30 +117,80 @@ class OverlayService : Service() {
 
         val owner = OverlayViewOwner().also { viewOwner = it }
         owner.attach()
-        val view = ComposeView(this).apply {
+        val composeView = ComposeView(this).apply {
             // A ComposeView outside an Activity needs its own view-tree owners.
             setViewTreeLifecycleOwner(owner)
             setViewTreeSavedStateRegistryOwner(owner)
             setContent {
                 OutlanderHubTheme {
-                    OverlayContent(
-                        stateFlow = (application as OutlanderApp).vehicleRepository.state,
-                        onDrag = ::moveBy,
-                    )
+                    OverlayContent(stateFlow = (application as OutlanderApp).vehicleRepository.state)
                 }
             }
+        }
+        val view = DraggableFrame(this).apply {
+            addView(composeView)
             isVisible = !ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
         }
         windowManager.addView(view, params)
         overlayView = view
     }
 
+    /**
+     * Drags the whole overlay window. Deltas come from raw screen coordinates
+     * — window moves shift the window-local frame mid-gesture, so local
+     * coordinates (including Compose's) produce feedback jitter. The wrapper
+     * intercepts only past touch-slop, so taps still reach the Compose
+     * content, which gets a proper CANCEL when a drag steals the gesture.
+     */
+    private inner class DraggableFrame(context: Context) : FrameLayout(context) {
+        private val slop = ViewConfiguration.get(context).scaledTouchSlop
+        private var downX = 0f
+        private var downY = 0f
+        private var lastX = 0f
+        private var lastY = 0f
+        private var dragging = false
+
+        override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = ev.rawX
+                    downY = ev.rawY
+                    dragging = false
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (!dragging && (abs(ev.rawX - downX) > slop || abs(ev.rawY - downY) > slop)) {
+                        dragging = true
+                        lastX = ev.rawX
+                        lastY = ev.rawY
+                        return true
+                    }
+                }
+            }
+            return false
+        }
+
+        override fun onTouchEvent(ev: MotionEvent): Boolean {
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_MOVE -> if (dragging) {
+                    moveBy(ev.rawX - lastX, ev.rawY - lastY)
+                    lastX = ev.rawX
+                    lastY = ev.rawY
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> dragging = false
+            }
+            return true
+        }
+    }
+
     private fun moveBy(dx: Float, dy: Float) {
         val view = overlayView ?: return
+        // A drag event can race service teardown; updating a removed view throws.
+        if (!view.isAttachedToWindow) return
         val params = layoutParams ?: return
         params.x += dx.roundToInt()
         params.y += dy.roundToInt()
-        windowManager.updateViewLayout(view, params)
+        runCatching { windowManager.updateViewLayout(view, params) }
+            .onFailure { Log.w(TAG, "updateViewLayout failed", it) }
     }
 
     private fun createNotificationChannel() {

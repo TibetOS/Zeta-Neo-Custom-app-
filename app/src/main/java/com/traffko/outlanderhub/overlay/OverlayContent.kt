@@ -1,6 +1,5 @@
 package com.traffko.outlanderhub.overlay
 
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,7 +17,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,28 +33,25 @@ import kotlinx.coroutines.flow.StateFlow
  * CarPlay/ZLink projection). Collapsed it shows speed + fuel + a status dot;
  * tapping expands a small card with the body/engine numbers. An active alert
  * (see [overlayAlert]) forces it open and turns it red.
+ *
+ * Dragging is NOT handled here: window moves shift the local pointer frame
+ * mid-gesture, which corrupts Compose-space deltas. The service wraps this
+ * content in a view that drags the window from raw screen coordinates.
  */
 @Composable
-fun OverlayContent(
-    stateFlow: StateFlow<VehicleState>,
-    onDrag: (Float, Float) -> Unit,
-) {
+fun OverlayContent(stateFlow: StateFlow<VehicleState>) {
     val vehicle by stateFlow.collectAsState()
     var expanded by remember { mutableStateOf(false) }
     val alert = overlayAlert(vehicle)
 
-    LaunchedEffect(alert != null) {
+    // Keyed on the alert text, not just its presence: a second alert of a
+    // different kind must re-expand a manually collapsed pill.
+    LaunchedEffect(alert) {
         if (alert != null) expanded = true
     }
 
     Column(
         Modifier
-            .pointerInput(Unit) {
-                detectDragGestures { change, drag ->
-                    change.consume()
-                    onDrag(drag.x, drag.y)
-                }
-            }
             .pressable { expanded = !expanded }
             .glassPanel(
                 corner = 18.dp,

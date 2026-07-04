@@ -46,12 +46,14 @@ the release APK and publishes it on a GitHub Release. On the unit,
 Setup → About → **Check for updates** compares the installed version against
 the latest release and links straight to the APK download.
 
-Release signing is driven by repository secrets (`RELEASE_KEYSTORE_BASE64`,
-`RELEASE_KEYSTORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD` —
-see `.github/workflows/release.yml`). Without them the release APK is
-unsigned (not installable), so configure the keystore before tagging. Keep
-using the same keystore forever: a signature change forces uninstall/reinstall
-on the unit, losing settings and signal mappings.
+Releases are signed with the checked-in `release-signing.keystore` by default
+(alias `outlander`, password `outlander-hub`), so tagging works with zero
+setup. This is a deliberate convenience for a personal, sideloaded app — the
+tradeoff is that anyone with repo access can sign app-compatible APKs. To use
+a private key instead, add the repository secrets described in
+`.github/workflows/release.yml`; they take priority over the committed
+keystore. Either way, keep the same key forever: a signature change forces
+uninstall/reinstall on the unit, losing settings and signal mappings.
 
 ## Installing on the Zeta Neo 14
 

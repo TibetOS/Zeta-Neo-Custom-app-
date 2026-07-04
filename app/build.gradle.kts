@@ -11,16 +11,32 @@ val appVersionName = providers.environmentVariable("APP_VERSION_NAME").orNull
 val appVersionCode = providers.environmentVariable("APP_VERSION_CODE").orNull
     ?.toIntOrNull() ?: 1
 
-// Release signing is optional: configured entirely from the environment
-// (see .github/workflows/release.yml) so no credential lives in the repo.
-// Without it, assembleRelease produces an unsigned APK.
+// Release signing, in priority order: environment (CI secrets, see
+// .github/workflows/release.yml) → the checked-in release-signing.keystore.
+// Committing the keystore is a deliberate convenience for this personal,
+// sideloaded app: it keeps the release signature stable so updates install
+// over each other with zero setup. Tradeoff: anyone with repo access can
+// sign app-compatible APKs — switch to CI secrets if that ever matters.
 fun env(name: String): String? =
     providers.environmentVariable(name).orNull?.takeIf { it.isNotBlank() }
 
-val releaseStoreFile = env("RELEASE_KEYSTORE_FILE")
-val releaseStorePassword = env("RELEASE_KEYSTORE_PASSWORD")
-val releaseKeyAlias = env("RELEASE_KEY_ALIAS")
-val releaseKeyPassword = env("RELEASE_KEY_PASSWORD")
+// The built-in credentials belong to the checked-in keystore ONLY. When a
+// custom keystore comes from the environment, its passwords must too — a
+// partial secret set should fail loudly, not fall back to the defaults and
+// produce a baffling "keystore password was incorrect".
+val envKeystorePath = env("RELEASE_KEYSTORE_FILE")
+fun requiredSigningEnv(name: String): String =
+    env(name) ?: error("RELEASE_KEYSTORE_FILE is set but $name is missing")
+
+val releaseStoreFile =
+    if (envKeystorePath != null) file(envKeystorePath)
+    else rootProject.file("release-signing.keystore").takeIf { it.exists() }
+val releaseStorePassword =
+    if (envKeystorePath != null) requiredSigningEnv("RELEASE_KEYSTORE_PASSWORD") else "outlander-hub"
+val releaseKeyAlias =
+    if (envKeystorePath != null) requiredSigningEnv("RELEASE_KEY_ALIAS") else "outlander"
+val releaseKeyPassword =
+    if (envKeystorePath != null) requiredSigningEnv("RELEASE_KEY_PASSWORD") else "outlander-hub"
 
 android {
     namespace = "com.traffko.outlanderhub"
@@ -35,10 +51,10 @@ android {
         versionName = appVersionName
     }
 
-    if (releaseStoreFile != null && releaseStorePassword != null && releaseKeyAlias != null && releaseKeyPassword != null) {
+    if (releaseStoreFile != null) {
         signingConfigs {
             create("release") {
-                storeFile = file(releaseStoreFile)
+                storeFile = releaseStoreFile
                 storePassword = releaseStorePassword
                 keyAlias = releaseKeyAlias
                 keyPassword = releaseKeyPassword

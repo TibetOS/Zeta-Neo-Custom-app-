@@ -139,7 +139,9 @@ fun SettingsScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                         "Permission not granted — the pill can't be shown. Tap here to open the system setting.",
                         color = Hue.Amber,
                         fontSize = 13.sp,
-                        modifier = Modifier.pressable { context.startActivity(overlayPermissionIntent(context)) },
+                        modifier = Modifier.pressable {
+                            runCatching { context.startActivity(overlayPermissionIntent(context)) }
+                        },
                     )
                 }
             }
@@ -149,8 +151,9 @@ fun SettingsScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                     if (enabled && !Settings.canDrawOverlays(context)) {
                         // Send the user to the system permission screen; the
                         // service starts once permission exists and the app
-                        // returns to the foreground.
-                        context.startActivity(overlayPermissionIntent(context))
+                        // returns to the foreground. Some firmwares strip this
+                        // settings screen — don't crash if it's missing.
+                        runCatching { context.startActivity(overlayPermissionIntent(context)) }
                     }
                     viewModel.setOverlayEnabled(enabled)
                 },
@@ -200,10 +203,13 @@ fun SettingsScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                         color = Hue.BlueBright,
                         modifier = Modifier.pressable {
                             val url = status.release.apkUrl ?: status.release.htmlUrl
-                            context.startActivity(
-                                Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            )
+                            // Stripped-down head-unit firmwares may lack a browser.
+                            runCatching {
+                                context.startActivity(
+                                    Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                )
+                            }
                         },
                     )
                 }

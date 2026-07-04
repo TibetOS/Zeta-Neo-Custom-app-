@@ -1,6 +1,7 @@
 package com.traffko.outlanderhub.vehicle
 
 import android.content.Context
+import android.os.SystemClock
 import com.traffko.outlanderhub.vehicle.fyt.FytVehicleBus
 import com.traffko.outlanderhub.vehicle.fyt.SignalKind
 import kotlinx.coroutines.CoroutineScope
@@ -51,6 +52,8 @@ class VehicleRepository(
     // Last payload signature per code, for stamping BusEvent.changed.
     private val lastPayload = HashMap<Int, Int>()
 
+    // Monotonic (elapsedRealtime) — wall time jumps when the unit syncs its
+    // clock from GPS/NTP after boot, which would corrupt silence intervals.
     @Volatile private var lastEventAtMs = 0L
 
     private val _eventLog = MutableStateFlow(EventLog())
@@ -103,7 +106,7 @@ class VehicleRepository(
         }
         pumpJobs += scope.launch {
             bus.events.collect { event ->
-                lastEventAtMs = event.timestampMs
+                lastEventAtMs = SystemClock.elapsedRealtime()
                 appendToLog(event)
             }
         }
@@ -127,11 +130,18 @@ class VehicleRepository(
      * [WATCHDOG_STALE_MS], rebind and say so in the log.
      */
     private suspend fun watchdogLoop(bus: VehicleBus) {
-        lastEventAtMs = System.currentTimeMillis()
+        lastEventAtMs = SystemClock.elapsedRealtime()
         while (true) {
             delay(WATCHDOG_PERIOD_MS)
-            val silenceMs = System.currentTimeMillis() - lastEventAtMs
-            if (_state.value.connected && silenceMs > WATCHDOG_STALE_MS) {
+            if (!_state.value.connected) {
+                // Not bound (car off, service gone): silence is expected.
+                // Keep the timer fresh so a reconnect isn't instantly judged
+                // stale before it has had a chance to deliver anything.
+                lastEventAtMs = SystemClock.elapsedRealtime()
+                continue
+            }
+            val silenceMs = SystemClock.elapsedRealtime() - lastEventAtMs
+            if (silenceMs > WATCHDOG_STALE_MS) {
                 appendToLog(
                     BusEvent(
                         timestampMs = System.currentTimeMillis(),
@@ -142,7 +152,7 @@ class VehicleRepository(
                 )
                 bus.stop()
                 bus.start()
-                lastEventAtMs = System.currentTimeMillis()
+                lastEventAtMs = SystemClock.elapsedRealtime()
             }
         }
     }

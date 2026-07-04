@@ -29,6 +29,13 @@ class TripTest {
     }
 
     @Test
+    fun `negative speed is invalid and contributes nothing`() {
+        // e.g. a decoder error marker like -1 must not accumulate distance.
+        val before = Trip(startedAtMs = 0L, distanceKm = 3.0, movingMs = 120_000L)
+        assertEquals(before, advanceTrip(before, -1f, 1_000L))
+    }
+
+    @Test
     fun `samples across a long gap are skipped`() {
         // App paused for a minute: speed during the gap is unknown.
         val before = Trip(startedAtMs = 0L, distanceKm = 5.0, movingMs = 300_000L)

@@ -29,6 +29,8 @@ object UpdateChecker {
             connection.connectTimeout = 10_000
             connection.readTimeout = 10_000
             connection.setRequestProperty("Accept", "application/vnd.github+json")
+            // GitHub's API rejects requests without a User-Agent.
+            connection.setRequestProperty("User-Agent", "OutlanderHub")
             try {
                 val json = JSONObject(connection.inputStream.bufferedReader().readText())
                 val assets = json.optJSONArray("assets")

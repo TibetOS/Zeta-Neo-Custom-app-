@@ -20,11 +20,13 @@ data class Trip(
  *
  * Samples spanning a gap longer than [MAX_SAMPLE_GAP_MS] (app paused, unit
  * asleep) contribute nothing: speed during the gap is unknown, and
- * integrating across it would fabricate distance.
+ * integrating across it would fabricate distance. Negative speeds are
+ * ignored as invalid rather than folded in via abs(): a decoder error
+ * marker like -1 would otherwise quietly accumulate ~1 km per parked hour.
  */
 fun advanceTrip(trip: Trip, speedKmh: Float?, dtMs: Long): Trip {
     if (dtMs <= 0 || dtMs > MAX_SAMPLE_GAP_MS) return trip
-    val speed = speedKmh ?: return trip
+    val speed = speedKmh?.takeIf { it >= 0f } ?: return trip
     val moving = speed > MOVING_THRESHOLD_KMH
     return trip.copy(
         distanceKm = trip.distanceKm + speed * dtMs / 3_600_000.0,

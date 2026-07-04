@@ -1,6 +1,7 @@
 package com.traffko.outlanderhub.vehicle.trip
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 private val Context.tripDataStore by preferencesDataStore(name = "trip")
@@ -50,12 +52,16 @@ class TripRepository(
             _trip.value = restored
             if (prefs[Keys.STARTED_AT] == null) persist(restored)
 
-            var lastSampleAt = System.currentTimeMillis()
+            // Monotonic clock: wall time jumps when the unit syncs from
+            // GPS/NTP after boot, which would corrupt dt. Atomic update():
+            // a concurrent reset() must not be overwritten by a stale sample.
+            var lastSampleAt = SystemClock.elapsedRealtime()
             var lastPersistAt = lastSampleAt
             while (true) {
                 delay(SAMPLE_EVERY_MS)
-                val now = System.currentTimeMillis()
-                _trip.value = advanceTrip(_trip.value, vehicleState.value.speedKmh, now - lastSampleAt)
+                val now = SystemClock.elapsedRealtime()
+                val dtMs = now - lastSampleAt
+                _trip.update { advanceTrip(it, vehicleState.value.speedKmh, dtMs) }
                 lastSampleAt = now
                 if (now - lastPersistAt >= PERSIST_EVERY_MS) {
                     lastPersistAt = now

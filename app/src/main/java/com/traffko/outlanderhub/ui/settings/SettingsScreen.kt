@@ -1,5 +1,9 @@
 package com.traffko.outlanderhub.ui.settings
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
@@ -20,14 +24,22 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.traffko.outlanderhub.MainViewModel
 import com.traffko.outlanderhub.ui.components.MicroLabel
@@ -90,6 +102,60 @@ fun SettingsScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
             )
         }
 
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .glassPanel()
+                .padding(22.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val context = LocalContext.current
+            // Re-checked on every resume so the warning below tracks what the
+            // user actually did on the system permission screen.
+            val lifecycleOwner = LocalLifecycleOwner.current
+            var hasOverlayPermission by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
+            DisposableEffect(lifecycleOwner) {
+                val observer = LifecycleEventObserver { _, event ->
+                    if (event == Lifecycle.Event.ON_RESUME) {
+                        hasOverlayPermission = Settings.canDrawOverlays(context)
+                    }
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+            }
+            Column(Modifier.weight(1f)) {
+                Text("Floating overlay", fontSize = 17.sp, color = Hue.TextPrimary)
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    "Vehicle pill shown over other apps (e.g. CarPlay projection). " +
+                        "Needs the \"display over other apps\" permission.",
+                    color = Hue.TextTertiary,
+                    fontSize = 13.sp,
+                )
+                if (settings.overlayEnabled && !hasOverlayPermission) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Permission not granted — the pill can't be shown. Tap here to open the system setting.",
+                        color = Hue.Amber,
+                        fontSize = 13.sp,
+                        modifier = Modifier.pressable { context.startActivity(overlayPermissionIntent(context)) },
+                    )
+                }
+            }
+            TeslaSwitch(
+                checked = settings.overlayEnabled,
+                onToggle = { enabled ->
+                    if (enabled && !Settings.canDrawOverlays(context)) {
+                        // Send the user to the system permission screen; the
+                        // service starts once permission exists and the app
+                        // returns to the foreground.
+                        context.startActivity(overlayPermissionIntent(context))
+                    }
+                    viewModel.setOverlayEnabled(enabled)
+                },
+            )
+        }
+
         Column(
             Modifier
                 .fillMaxWidth()
@@ -148,6 +214,11 @@ private fun SourceOption(
         }
     }
 }
+
+private fun overlayPermissionIntent(context: Context) = Intent(
+    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+    Uri.parse("package:${context.packageName}"),
+).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
 /** Minimal pill switch in the Tesla idiom — blue when on, no Material thumb icon. */
 @Composable

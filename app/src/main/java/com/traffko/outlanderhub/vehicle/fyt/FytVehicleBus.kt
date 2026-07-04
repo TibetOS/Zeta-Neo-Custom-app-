@@ -39,7 +39,10 @@ private const val TAG = "FytVehicleBus"
  * mirrored to [events] so the Diagnostics screen can be used on the real car
  * to confirm/adjust the code mapping in [FytSignalMap].
  */
-class FytVehicleBus(private val context: Context) : VehicleBus {
+class FytVehicleBus(
+    private val context: Context,
+    private val signalMap: StateFlow<Map<Int, SignalKind>>,
+) : VehicleBus {
 
     private val _state = MutableStateFlow(VehicleState(source = VehicleSource.FYT_CAN))
     override val state: StateFlow<VehicleState> = _state.asStateFlow()
@@ -70,7 +73,7 @@ class FytVehicleBus(private val context: Context) : VehicleBus {
                 strings = strs?.toList() ?: emptyList(),
             )
             _events.tryEmit(event)
-            _state.update { FytSignalDecoder.apply(it, event) }
+            _state.update { FytSignalDecoder.apply(it, event, signalMap.value) }
         }
     }
 

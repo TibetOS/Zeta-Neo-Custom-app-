@@ -51,7 +51,7 @@ and registers for update codes 0..255. Every callback is:
      `adb pull $(adb shell pm path com.syu.ms | cut -d: -f2)` and decompile
      (jadx) → check `com.syu.ipc.IRemoteModule$Stub` transaction order, and fix
      the `.aidl` files to match.
-4. Trigger events and note the codes that fire:
+4. Trigger events and watch which rows light up **amber** (payload changed):
    | Action in car          | Expected signal      |
    |------------------------|----------------------|
    | Open/close each door   | doors bitmask        |
@@ -59,8 +59,13 @@ and registers for update codes 0..255. Every callback is:
    | Change fan / temp      | climate              |
    | Start engine, rev      | RPM                  |
    | Drive                  | speed, gear          |
-5. Write the observed codes into `FytSignalMap`, rebuild, verify the Dash and
-   Car screens now show live values.
+5. Tap the changed row and assign its code to the matching signal. The
+   mapping applies **live** (DataStore-backed, survives restarts — no
+   rebuild): the Dash and Car screens update immediately. Assigning a signal
+   to a new code automatically unassigns it from the old one; "Reset all to
+   defaults" restores `FytSignalMap.DEFAULTS`. Use **Export** to dump the
+   raw log to a file (`Android/data/com.traffko.outlanderhub/files/can-logs/`)
+   for offline analysis.
 
 ## If the toolkit route fails entirely
 

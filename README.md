@@ -14,9 +14,17 @@ fitted with a **Zeta Neo 14** Android head unit (FYT platform).
 - **Car** — body status: doors/trunk, handbrake, seatbelt, climate readout and
   tire pressures (TPMS).
 - **CAN** — diagnostics screen showing raw CAN-decoder traffic, used to map the
-  Outlander decoder signals (see below). Includes a manual command sender.
+  Outlander decoder signals (see below). Rows whose payload just changed light
+  up amber; tap a row to assign its code to a vehicle signal **at runtime** —
+  no rebuild. Includes a manual command sender and a log exporter.
 - **Setup** — switch between the *Demo* data source (simulated drive, for testing
   the UI anywhere) and the *Zeta CAN decoder* source.
+- **Overlay** — optional floating vehicle pill (speed, fuel, alerts) drawn over
+  other apps, most usefully over the CarPlay/ZLink projection where vehicle
+  data is otherwise invisible. Tap to expand, drag to move; door/seatbelt/
+  coolant/tire alerts auto-expand it. Enable in Setup (requires the
+  "display over other apps" permission; the overlay hides automatically while
+  Outlander Hub itself is on screen).
 
 ## Building
 
@@ -52,10 +60,14 @@ undocumented and the exact signal codes differ per vehicle decoder.
    `registered for N CAN update codes`. If binding fails, the firmware uses a
    different service action — see `docs/CAN-INTEGRATION.md`.
 3. Do things in the car (open a door, turn the wheel, press the brake, change
-   fan speed, drive) and note which `code=` values change.
-4. Update the constants in
-   `app/src/main/java/com/traffko/outlanderhub/vehicle/fyt/FytProtocol.kt`
-   (`FytSignalMap`) to match, rebuild, reinstall.
+   fan speed, drive) and watch which rows light up **amber** — those codes'
+   payloads just changed.
+4. Tap the row → assign the code to the matching signal (Speed, Doors, …).
+   The mapping applies live and is persisted; the Dash/Car screens update
+   immediately. No rebuild needed. (`FytSignalMap.DEFAULTS` in
+   `vehicle/fyt/FytProtocol.kt` only seeds the initial map; "Reset all to
+   defaults" in the assign dialog restores it.) Use **Export** to save the
+   raw log for offline analysis.
 
 Full details and fallback strategies: [`docs/CAN-INTEGRATION.md`](docs/CAN-INTEGRATION.md).
 

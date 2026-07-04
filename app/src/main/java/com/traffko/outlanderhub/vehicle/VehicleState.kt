@@ -57,6 +57,11 @@ data class EventLog(
 /**
  * A raw event from the underlying bus, kept for the diagnostics screen so
  * unknown CAN-decoder signals can be observed and mapped.
+ *
+ * [changed] is stamped by the log keeper when this event's payload differs
+ * from the previous event with the same code — decoders rebroadcast values
+ * constantly, and "which code just changed?" is the question the mapping
+ * workflow needs answered.
  */
 data class BusEvent(
     val timestampMs: Long,
@@ -65,6 +70,7 @@ data class BusEvent(
     val ints: List<Int> = emptyList(),
     val floats: List<Float> = emptyList(),
     val strings: List<String> = emptyList(),
+    val changed: Boolean = false,
 ) {
     fun pretty(): String = buildString {
         append(channel).append(" code=").append(code)

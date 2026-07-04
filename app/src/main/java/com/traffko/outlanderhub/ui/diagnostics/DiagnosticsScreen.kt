@@ -28,8 +28,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.traffko.outlanderhub.MainViewModel
+import com.traffko.outlanderhub.vehicle.fyt.SignalKind
 import com.traffko.outlanderhub.ui.components.MicroLabel
 import com.traffko.outlanderhub.ui.components.glassPanel
 import com.traffko.outlanderhub.ui.components.pressable
@@ -45,14 +47,18 @@ private val TimestampFormatter = DateTimeFormatter.ofPattern("HH:mm:ss.SSS", Loc
 
 /**
  * Live view of raw CAN-decoder traffic, styled as a quiet terminal panel.
- * Perform an action in the car and watch which code changes, then update
- * FytSignalMap with the observed code.
+ * The in-car mapping workflow: perform an action in the car, watch which
+ * code lights up amber (payload changed), tap that row and assign the code
+ * to a signal — the mapping applies live, no rebuild.
  */
 @Composable
 fun DiagnosticsScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
     val log by viewModel.eventLog.collectAsStateWithLifecycle()
+    val signalMap by viewModel.signalMap.collectAsStateWithLifecycle()
+    val exportPath by viewModel.lastExportPath.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val zone = remember { ZoneId.systemDefault() }
+    var assignCode by remember { mutableStateOf<Int?>(null) }
 
     // Instant (non-animated) scroll: overlapping animations freeze the UI
     // when the CAN bus is chatty. Keyed on the generation counter, not the
@@ -65,9 +71,13 @@ fun DiagnosticsScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("CAN bus", fontSize = 30.sp, fontWeight = FontWeight.Light, color = Hue.TextPrimary)
+            Spacer(Modifier.width(16.dp))
+            MicroLabel("tap a row to map it")
             Spacer(Modifier.weight(1f))
             MicroLabel("${log.events.size} events")
             Spacer(Modifier.width(20.dp))
+            GhostButton("Export") { viewModel.exportLog() }
+            Spacer(Modifier.width(12.dp))
             GhostButton("Clear") { viewModel.clearEventLog() }
         }
 
@@ -81,15 +91,28 @@ fun DiagnosticsScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
         ) {
             items(log.events) { event ->
                 val time = TimestampFormatter.format(Instant.ofEpochMilli(event.timestampMs).atZone(zone))
+                val tag = signalMap[event.code]?.let { "[${it.name}] " } ?: ""
                 Text(
-                    "$time  ${event.pretty()}",
+                    "$time  $tag${event.pretty()}",
                     fontFamily = FontFamily.Monospace,
                     fontSize = 13.sp,
                     lineHeight = 19.sp,
-                    color = if (event.channel.endsWith("info")) Hue.BlueBright
-                    else Color(0xFFB9C2CC),
+                    color = when {
+                        event.channel.endsWith("info") -> Hue.BlueBright
+                        event.changed -> Hue.Amber
+                        else -> Color(0xFFB9C2CC)
+                    },
+                    modifier = if (event.code >= 0) {
+                        Modifier.pressable { assignCode = event.code }
+                    } else {
+                        Modifier
+                    },
                 )
             }
+        }
+
+        exportPath?.let {
+            MicroLabel("log saved: $it", color = Hue.TextTertiary)
         }
 
         // Manual command sender for probing decoder controls.
@@ -110,6 +133,91 @@ fun DiagnosticsScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
             }
         }
         Spacer(Modifier.height(6.dp))
+    }
+
+    assignCode?.let { code ->
+        AssignSignalDialog(
+            code = code,
+            signalMap = signalMap,
+            onAssign = { kind ->
+                viewModel.assignSignal(code, kind)
+                assignCode = null
+            },
+            onReset = {
+                viewModel.resetSignalMap()
+                assignCode = null
+            },
+            onDismiss = { assignCode = null },
+        )
+    }
+}
+
+/**
+ * Picker shown when a log row is tapped: assigns the tapped code to a
+ * vehicle signal (moving the signal off its previous code), clears the
+ * code's mapping, or resets the whole map to the built-in defaults.
+ */
+@Composable
+private fun AssignSignalDialog(
+    code: Int,
+    signalMap: Map<Int, SignalKind>,
+    onAssign: (SignalKind?) -> Unit,
+    onReset: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier
+                .glassPanel(corner = 20.dp)
+                .padding(22.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Map code $code", fontSize = 20.sp, fontWeight = FontWeight.Light, color = Hue.TextPrimary)
+                Spacer(Modifier.weight(1f))
+                signalMap[code]?.let { MicroLabel("now: ${it.name}") }
+            }
+            Spacer(Modifier.height(14.dp))
+            SignalKind.entries.chunked(2).forEach { pair ->
+                Row {
+                    pair.forEach { kind ->
+                        val currentCode = signalMap.entries.firstOrNull { it.value == kind }?.key
+                        val selected = currentCode == code
+                        Row(
+                            Modifier
+                                .weight(1f)
+                                .padding(vertical = 3.dp, horizontal = 4.dp)
+                                .pressable { onAssign(kind) }
+                                .glassPanel(
+                                    corner = 12.dp,
+                                    fill = if (selected) Hue.Blue.copy(alpha = 0.22f) else Hue.Panel,
+                                    stroke = if (selected) Hue.Blue.copy(alpha = 0.5f) else Hue.Hairline,
+                                )
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                kind.label,
+                                fontSize = 14.sp,
+                                color = if (selected) Hue.BlueBright else Hue.TextPrimary,
+                            )
+                            Spacer(Modifier.weight(1f))
+                            MicroLabel(currentCode?.toString() ?: "--", color = Hue.TextTertiary)
+                        }
+                    }
+                    if (pair.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Row {
+                if (signalMap.containsKey(code)) {
+                    GhostButton("Clear mapping") { onAssign(null) }
+                    Spacer(Modifier.width(12.dp))
+                }
+                GhostButton("Reset all to defaults") { onReset() }
+                Spacer(Modifier.weight(1f))
+                GhostButton("Close", accent = true) { onDismiss() }
+            }
+        }
     }
 }
 

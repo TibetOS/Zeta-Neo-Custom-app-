@@ -39,34 +39,63 @@ object FytProtocol {
     const val CAN_SUBSCRIBE_TO = 255
 }
 
+/** The vehicle signals a CAN update code can be mapped to. */
+enum class SignalKind(val label: String) {
+    SPEED("Speed"),
+    RPM("RPM"),
+    BATTERY_VOLTS("Battery volts"),
+    COOLANT_TEMP("Coolant temp"),
+    FUEL("Fuel level"),
+    OUTSIDE_TEMP("Outside temp"),
+    ODOMETER("Odometer"),
+    HANDBRAKE("Handbrake"),
+    SEATBELT("Driver seatbelt"),
+    GEAR("Gear"),
+    DOORS("Doors"),
+    CLIMATE("Climate"),
+    TPMS("Tire pressure"),
+}
+
 /**
- * Mapping of observed CAN-module update codes to vehicle signals for the
+ * Default mapping of CAN-module update codes to vehicle signals for the
  * Mitsubishi Outlander (2019) decoder shipped with the Zeta Neo 14.
  *
  * These defaults follow the most common FYT "Raise/Hiworld Mitsubishi"
- * decoder layout but MUST be validated with the Diagnostics screen on the
- * actual car: drive, watch which codes change with speed/RPM/doors, then
- * adjust here.
+ * decoder layout but MUST be validated on the actual car. They no longer
+ * need a rebuild to correct: tap an event in the CAN tab and assign the
+ * code to a signal — the live mapping is DataStore-backed (see
+ * [SignalMapRepository]) and these values only seed it.
  */
 object FytSignalMap {
-    const val CODE_DOORS = 16
-    const val CODE_OUTSIDE_TEMP = 17
-    const val CODE_SPEED = 32
-    const val CODE_RPM = 33
-    const val CODE_BATTERY_VOLTS = 34
-    const val CODE_COOLANT_TEMP = 35
-    const val CODE_FUEL = 36
-    const val CODE_ODOMETER = 37
-    const val CODE_HANDBRAKE = 38
-    const val CODE_SEATBELT = 39
+    val DEFAULTS: Map<Int, SignalKind> = mapOf(
+        16 to SignalKind.DOORS,
+        17 to SignalKind.OUTSIDE_TEMP,
+        32 to SignalKind.SPEED,
+        33 to SignalKind.RPM,
+        34 to SignalKind.BATTERY_VOLTS,
+        35 to SignalKind.COOLANT_TEMP,
+        36 to SignalKind.FUEL,
+        37 to SignalKind.ODOMETER,
+        38 to SignalKind.HANDBRAKE,
+        39 to SignalKind.SEATBELT,
+        // GEAR at 40 is a guess — no observed code yet; placed after the
+        // drive block so the Dash PRND strip has a chance of lighting up.
+        40 to SignalKind.GEAR,
+        48 to SignalKind.CLIMATE,
+        64 to SignalKind.TPMS,
+    )
 
-    /**
-     * Gear position. GUESS — no observed code yet, placed after the drive
-     * block so the Dash PRND strip has a chance of lighting up. Validate in
-     * the car (shift P→R→N→D, watch which code fires in the CAN tab) and
-     * correct both this constant and [FytSignalDecoder.decodeGear].
-     */
-    const val CODE_GEAR = 40
-    const val CODE_CLIMATE = 48
-    const val CODE_TPMS = 64
+    /** Serializes a mapping for DataStore, e.g. `"16:DOORS,32:SPEED"`. */
+    fun encode(map: Map<Int, SignalKind>): String =
+        map.entries.sortedBy { it.key }.joinToString(",") { "${it.key}:${it.value.name}" }
+
+    /** Tolerant inverse of [encode]: unknown kinds and malformed entries are dropped. */
+    fun decode(raw: String): Map<Int, SignalKind> = raw.split(',')
+        .mapNotNull { entry ->
+            val (codeText, kindText) = entry.split(':').takeIf { it.size == 2 } ?: return@mapNotNull null
+            val code = codeText.trim().toIntOrNull() ?: return@mapNotNull null
+            val kind = SignalKind.entries.firstOrNull { it.name == kindText.trim() } ?: return@mapNotNull null
+            code to kind
+        }
+        .toMap()
 }

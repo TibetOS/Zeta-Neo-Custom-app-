@@ -9,6 +9,7 @@ import com.traffko.outlanderhub.apps.InstalledAppsRepository
 import com.traffko.outlanderhub.overlay.OverlayService
 import com.traffko.outlanderhub.settings.SettingsRepository
 import com.traffko.outlanderhub.vehicle.VehicleRepository
+import com.traffko.outlanderhub.vehicle.fyt.SignalMapRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -26,13 +27,16 @@ class OutlanderApp : Application() {
         private set
     lateinit var installedAppsRepository: InstalledAppsRepository
         private set
+    lateinit var signalMapRepository: SignalMapRepository
+        private set
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val appVisible = MutableStateFlow(false)
 
     override fun onCreate() {
         super.onCreate()
-        vehicleRepository = VehicleRepository(this)
+        signalMapRepository = SignalMapRepository(this)
+        vehicleRepository = VehicleRepository(this, signalMapRepository.map)
         settingsRepository = SettingsRepository(this)
         installedAppsRepository = InstalledAppsRepository(this)
 

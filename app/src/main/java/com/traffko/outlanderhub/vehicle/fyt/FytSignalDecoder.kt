@@ -6,37 +6,38 @@ import com.traffko.outlanderhub.vehicle.DoorState
 import com.traffko.outlanderhub.vehicle.VehicleState
 
 /**
- * Pure mapping of raw CAN-module updates onto [VehicleState] per
- * [FytSignalMap]. Kept free of Android/binder dependencies so the decoding
+ * Pure mapping of raw CAN-module updates onto [VehicleState] per the active
+ * code→signal map. Kept free of Android/binder dependencies so the decoding
  * rules — the part of the FYT integration most likely to need adjustment
  * after observing the real car — are unit-testable on the JVM.
  */
 internal object FytSignalDecoder {
 
     /**
-     * Returns [s] updated with whatever [e] carries. Any event at all proves
-     * the decoder link is alive, so the result is always marked connected.
+     * Returns [s] updated with whatever [e] carries under [map]. Any event at
+     * all proves the decoder link is alive, so the result is always marked
+     * connected.
      */
-    fun apply(s: VehicleState, e: BusEvent): VehicleState {
+    fun apply(s: VehicleState, e: BusEvent, map: Map<Int, SignalKind>): VehicleState {
         val i0 = e.ints.getOrNull(0)
         val f0 = e.floats.getOrNull(0)
-        return when (e.code) {
-            FytSignalMap.CODE_SPEED -> s.copy(speedKmh = f0 ?: i0?.toFloat())
-            FytSignalMap.CODE_RPM -> s.copy(rpm = i0)
-            FytSignalMap.CODE_BATTERY_VOLTS -> s.copy(batteryVolts = f0 ?: i0?.let { it / 10f })
-            FytSignalMap.CODE_COOLANT_TEMP -> s.copy(coolantTempC = f0 ?: i0?.toFloat())
-            FytSignalMap.CODE_FUEL -> s.copy(fuelPercent = f0 ?: i0?.toFloat())
-            FytSignalMap.CODE_OUTSIDE_TEMP -> s.copy(outsideTempC = f0 ?: i0?.toFloat())
-            FytSignalMap.CODE_ODOMETER -> s.copy(odometerKm = i0)
-            FytSignalMap.CODE_HANDBRAKE -> s.copy(handbrake = i0?.let { it != 0 })
-            FytSignalMap.CODE_SEATBELT -> s.copy(seatbeltDriver = i0?.let { it != 0 })
-            FytSignalMap.CODE_GEAR -> s.copy(gear = decodeGear(e.ints, e.strings) ?: s.gear)
-            FytSignalMap.CODE_DOORS -> s.copy(doors = decodeDoors(e.ints))
-            FytSignalMap.CODE_CLIMATE -> s.copy(climate = decodeClimate(e.ints, e.floats))
-            FytSignalMap.CODE_TPMS -> s.copy(
+        return when (map[e.code]) {
+            SignalKind.SPEED -> s.copy(speedKmh = f0 ?: i0?.toFloat())
+            SignalKind.RPM -> s.copy(rpm = i0)
+            SignalKind.BATTERY_VOLTS -> s.copy(batteryVolts = f0 ?: i0?.let { it / 10f })
+            SignalKind.COOLANT_TEMP -> s.copy(coolantTempC = f0 ?: i0?.toFloat())
+            SignalKind.FUEL -> s.copy(fuelPercent = f0 ?: i0?.toFloat())
+            SignalKind.OUTSIDE_TEMP -> s.copy(outsideTempC = f0 ?: i0?.toFloat())
+            SignalKind.ODOMETER -> s.copy(odometerKm = i0)
+            SignalKind.HANDBRAKE -> s.copy(handbrake = i0?.let { it != 0 })
+            SignalKind.SEATBELT -> s.copy(seatbeltDriver = i0?.let { it != 0 })
+            SignalKind.GEAR -> s.copy(gear = decodeGear(e.ints, e.strings) ?: s.gear)
+            SignalKind.DOORS -> s.copy(doors = decodeDoors(e.ints))
+            SignalKind.CLIMATE -> s.copy(climate = decodeClimate(e.ints, e.floats))
+            SignalKind.TPMS -> s.copy(
                 tirePressuresKpa = (0..3).map { idx -> e.floats.getOrNull(idx) ?: e.ints.getOrNull(idx)?.toFloat() }
             )
-            else -> s
+            null -> s
         }.copy(connected = true)
     }
 

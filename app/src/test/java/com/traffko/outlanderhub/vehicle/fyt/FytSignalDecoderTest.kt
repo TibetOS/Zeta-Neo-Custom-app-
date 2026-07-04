@@ -12,12 +12,16 @@ import org.junit.Test
 
 /**
  * Locks in the decoding assumptions that must survive the in-car mapping
- * sessions — if a signal layout is corrected in FytSignalMap/FytSignalDecoder,
- * these tests document what changed.
+ * sessions — if a signal layout is corrected in the decoder, these tests
+ * document what changed.
  */
 class FytSignalDecoderTest {
 
     private val base = VehicleState(source = VehicleSource.FYT_CAN)
+    private val defaults = FytSignalMap.DEFAULTS
+
+    private fun codeOf(kind: SignalKind): Int =
+        defaults.entries.first { it.value == kind }.key
 
     private fun event(
         code: Int,
@@ -28,33 +32,44 @@ class FytSignalDecoderTest {
 
     @Test
     fun `any event marks the bus connected`() {
-        val out = FytSignalDecoder.apply(base, event(code = 9999))
+        val out = FytSignalDecoder.apply(base, event(code = 9999), defaults)
         assertTrue(out.connected)
         assertEquals(base, out.copy(connected = false))
     }
 
     @Test
     fun `speed prefers float payload over int`() {
-        val out = FytSignalDecoder.apply(base, event(FytSignalMap.CODE_SPEED, ints = listOf(88), floats = listOf(64.5f)))
+        val out = FytSignalDecoder.apply(base, event(codeOf(SignalKind.SPEED), ints = listOf(88), floats = listOf(64.5f)), defaults)
         assertEquals(64.5f, out.speedKmh)
     }
 
     @Test
     fun `speed falls back to int payload`() {
-        val out = FytSignalDecoder.apply(base, event(FytSignalMap.CODE_SPEED, ints = listOf(88)))
+        val out = FytSignalDecoder.apply(base, event(codeOf(SignalKind.SPEED), ints = listOf(88)), defaults)
         assertEquals(88f, out.speedKmh)
     }
 
     @Test
     fun `battery int payload is tenths of a volt`() {
-        val out = FytSignalDecoder.apply(base, event(FytSignalMap.CODE_BATTERY_VOLTS, ints = listOf(142)))
+        val out = FytSignalDecoder.apply(base, event(codeOf(SignalKind.BATTERY_VOLTS), ints = listOf(142)), defaults)
         assertEquals(14.2f, out.batteryVolts)
     }
 
     @Test
     fun `empty payload leaves signal unknown`() {
-        val out = FytSignalDecoder.apply(base, event(FytSignalMap.CODE_RPM))
+        val out = FytSignalDecoder.apply(base, event(codeOf(SignalKind.RPM)), defaults)
         assertNull(out.rpm)
+    }
+
+    @Test
+    fun `a remapped code decodes as its assigned signal`() {
+        // The in-car workflow: speed turned out to live on code 200.
+        val remapped = mapOf(200 to SignalKind.SPEED)
+        val out = FytSignalDecoder.apply(base, event(200, ints = listOf(77)), remapped)
+        assertEquals(77f, out.speedKmh)
+        // ...and the old default code no longer feeds speed.
+        val ignored = FytSignalDecoder.apply(base, event(codeOf(SignalKind.SPEED), ints = listOf(88)), remapped)
+        assertNull(ignored.speedKmh)
     }
 
     @Test
@@ -103,19 +118,19 @@ class FytSignalDecoderTest {
     @Test
     fun `undecodable gear payload keeps the previous gear`() {
         val driving = base.copy(gear = "D")
-        val out = FytSignalDecoder.apply(driving, event(FytSignalMap.CODE_GEAR, ints = listOf(9)))
+        val out = FytSignalDecoder.apply(driving, event(codeOf(SignalKind.GEAR), ints = listOf(9)), defaults)
         assertEquals("D", out.gear)
     }
 
     @Test
     fun `tpms fills four corners and pads missing ones with null`() {
-        val out = FytSignalDecoder.apply(base, event(FytSignalMap.CODE_TPMS, floats = listOf(230f, 231f, 228f)))
+        val out = FytSignalDecoder.apply(base, event(codeOf(SignalKind.TPMS), floats = listOf(230f, 231f, 228f)), defaults)
         assertEquals(listOf(230f, 231f, 228f, null), out.tirePressuresKpa)
     }
 
     @Test
     fun `tpms falls back to int payload`() {
-        val out = FytSignalDecoder.apply(base, event(FytSignalMap.CODE_TPMS, ints = listOf(230, 231, 228, 229)))
+        val out = FytSignalDecoder.apply(base, event(codeOf(SignalKind.TPMS), ints = listOf(230, 231, 228, 229)), defaults)
         assertEquals(listOf(230f, 231f, 228f, 229f), out.tirePressuresKpa)
     }
 }

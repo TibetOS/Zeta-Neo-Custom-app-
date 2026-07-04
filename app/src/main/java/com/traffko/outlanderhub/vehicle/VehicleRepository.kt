@@ -51,6 +51,8 @@ class VehicleRepository(
     // Last payload signature per code, for stamping BusEvent.changed.
     private val lastPayload = HashMap<Int, Int>()
 
+    @Volatile private var lastEventAtMs = 0L
+
     private val _eventLog = MutableStateFlow(EventLog())
     val eventLog: StateFlow<EventLog> = _eventLog.asStateFlow()
 
@@ -101,12 +103,8 @@ class VehicleRepository(
         }
         pumpJobs += scope.launch {
             bus.events.collect { event ->
-                synchronized(logLock) {
-                    logBuffer.addLast(stampChanged(event))
-                    if (logBuffer.size > MAX_LOG) logBuffer.removeFirst()
-                    logGeneration++
-                }
-                logDirty.trySend(Unit)
+                lastEventAtMs = event.timestampMs
+                appendToLog(event)
             }
         }
         pumpJobs += scope.launch {
@@ -117,6 +115,45 @@ class VehicleRepository(
                 delay(LOG_PUBLISH_MS)
             }
         }
+        if (bus === fytBus) {
+            pumpJobs += scope.launch { watchdogLoop(bus) }
+        }
+    }
+
+    /**
+     * The FYT toolkit is an undocumented service on cheap hardware — it can
+     * silently stop delivering callbacks while the binding looks healthy.
+     * If the bus claims to be connected but no event has arrived for
+     * [WATCHDOG_STALE_MS], rebind and say so in the log.
+     */
+    private suspend fun watchdogLoop(bus: VehicleBus) {
+        lastEventAtMs = System.currentTimeMillis()
+        while (true) {
+            delay(WATCHDOG_PERIOD_MS)
+            val silenceMs = System.currentTimeMillis() - lastEventAtMs
+            if (_state.value.connected && silenceMs > WATCHDOG_STALE_MS) {
+                appendToLog(
+                    BusEvent(
+                        timestampMs = System.currentTimeMillis(),
+                        channel = "watchdog-info",
+                        code = -1,
+                        strings = listOf("no CAN traffic for ${silenceMs / 1000}s — rebinding"),
+                    )
+                )
+                bus.stop()
+                bus.start()
+                lastEventAtMs = System.currentTimeMillis()
+            }
+        }
+    }
+
+    private fun appendToLog(event: BusEvent) {
+        synchronized(logLock) {
+            logBuffer.addLast(stampChanged(event))
+            if (logBuffer.size > MAX_LOG) logBuffer.removeFirst()
+            logGeneration++
+        }
+        logDirty.trySend(Unit)
     }
 
     private fun publishLog() {
@@ -161,5 +198,7 @@ class VehicleRepository(
     private companion object {
         const val MAX_LOG = 400
         const val LOG_PUBLISH_MS = 100L
+        const val WATCHDOG_PERIOD_MS = 30_000L
+        const val WATCHDOG_STALE_MS = 120_000L
     }
 }

@@ -42,6 +42,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.traffko.outlanderhub.MainViewModel
+import com.traffko.outlanderhub.UpdateStatus
 import com.traffko.outlanderhub.ui.components.MicroLabel
 import com.traffko.outlanderhub.ui.components.glassPanel
 import com.traffko.outlanderhub.ui.components.pressable
@@ -171,6 +172,42 @@ fun SettingsScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                 fontSize = 14.sp,
                 lineHeight = 20.sp,
             )
+            Spacer(Modifier.height(12.dp))
+            val context = LocalContext.current
+            val updateStatus by viewModel.updateStatus.collectAsStateWithLifecycle()
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                MicroLabel("Version ${viewModel.currentVersion}")
+                Spacer(Modifier.weight(1f))
+                when (val status = updateStatus) {
+                    UpdateStatus.Idle -> Text(
+                        "Check for updates",
+                        fontSize = 14.sp,
+                        color = Hue.BlueBright,
+                        modifier = Modifier.pressable { viewModel.checkForUpdates() },
+                    )
+                    UpdateStatus.Checking -> Text("Checking…", fontSize = 14.sp, color = Hue.TextTertiary)
+                    UpdateStatus.UpToDate -> Text("Up to date", fontSize = 14.sp, color = Hue.TextSecondary)
+                    UpdateStatus.Failed -> Text(
+                        "Check failed — tap to retry",
+                        fontSize = 14.sp,
+                        color = Hue.Amber,
+                        modifier = Modifier.pressable { viewModel.checkForUpdates() },
+                    )
+                    is UpdateStatus.Available -> Text(
+                        "Download ${status.release.tag}",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Hue.BlueBright,
+                        modifier = Modifier.pressable {
+                            val url = status.release.apkUrl ?: status.release.htmlUrl
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            )
+                        },
+                    )
+                }
+            }
         }
         Spacer(Modifier.height(6.dp))
     }

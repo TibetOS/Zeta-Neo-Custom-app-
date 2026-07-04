@@ -53,6 +53,7 @@ import com.traffko.outlanderhub.ui.components.glassPanel
 import com.traffko.outlanderhub.ui.components.pressable
 import com.traffko.outlanderhub.ui.theme.DisplayM
 import com.traffko.outlanderhub.ui.theme.Hue
+import com.traffko.outlanderhub.vehicle.trip.Trip
 import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.ZoneId
@@ -92,6 +93,7 @@ fun LauncherScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
     }
 
     val vehicle by viewModel.vehicleState.collectAsStateWithLifecycle()
+    val trip by viewModel.trip.collectAsStateWithLifecycle()
 
     Row(modifier) {
         // Left: clock + vehicle glance
@@ -116,6 +118,10 @@ fun LauncherScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                 GlanceRow("Fuel", vehicle.fuelPercent?.let { "%.0f%%".format(it) } ?: "--")
                 GlanceRow("Battery", vehicle.batteryVolts?.let { "%.1f V".format(it) } ?: "--")
             }
+
+            Spacer(Modifier.height(16.dp))
+
+            TripCard(trip, onReset = viewModel::resetTrip)
 
             Spacer(Modifier.weight(1f))
 
@@ -202,6 +208,45 @@ private fun Clock() {
         fontSize = 16.sp,
         color = Hue.TextSecondary,
     )
+}
+
+/** Odometer-independent trip stats, integrated from speed samples. */
+@Composable
+private fun TripCard(trip: Trip, onReset: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .glassPanel()
+            .padding(horizontal = 22.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            MicroLabel("Trip")
+            Spacer(Modifier.weight(1f))
+            MicroLabel(
+                "reset",
+                color = Hue.TextTertiary,
+                modifier = Modifier.pressable(onReset),
+            )
+        }
+        TripRow("Distance", "%.1f km".format(trip.distanceKm))
+        TripRow("Driving", formatDrivingTime(trip.movingMs))
+        TripRow("Avg speed", if (trip.movingMs > 0) "%.0f km/h".format(trip.avgSpeedKmh) else "--")
+    }
+}
+
+@Composable
+private fun TripRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, fontSize = 14.sp, color = Hue.TextSecondary)
+        Spacer(Modifier.weight(1f))
+        Text(value, fontSize = 19.sp, fontWeight = FontWeight.Light, color = Hue.TextPrimary)
+    }
+}
+
+private fun formatDrivingTime(ms: Long): String {
+    val totalMinutes = ms / 60_000
+    return "%d:%02d".format(totalMinutes / 60, totalMinutes % 60)
 }
 
 @Composable

@@ -4,6 +4,24 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// Set by the release workflow from the git tag / run number; local builds
+// fall back to a dev version.
+val appVersionName = providers.environmentVariable("APP_VERSION_NAME").orNull
+    ?.removePrefix("v") ?: "0.1.0-dev"
+val appVersionCode = providers.environmentVariable("APP_VERSION_CODE").orNull
+    ?.toIntOrNull() ?: 1
+
+// Release signing is optional: configured entirely from the environment
+// (see .github/workflows/release.yml) so no credential lives in the repo.
+// Without it, assembleRelease produces an unsigned APK.
+fun env(name: String): String? =
+    providers.environmentVariable(name).orNull?.takeIf { it.isNotBlank() }
+
+val releaseStoreFile = env("RELEASE_KEYSTORE_FILE")
+val releaseStorePassword = env("RELEASE_KEYSTORE_PASSWORD")
+val releaseKeyAlias = env("RELEASE_KEY_ALIAS")
+val releaseKeyPassword = env("RELEASE_KEY_PASSWORD")
+
 android {
     namespace = "com.traffko.outlanderhub"
     compileSdk = 35
@@ -13,14 +31,26 @@ android {
         // Zeta Neo units ship with Android 10+; keep minSdk low enough for older firmware.
         minSdk = 28
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
+    }
+
+    if (releaseStoreFile != null && releaseStorePassword != null && releaseKeyAlias != null && releaseKeyPassword != null) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(releaseStoreFile)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.findByName("release")
         }
     }
     compileOptions {

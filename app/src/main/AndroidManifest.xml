@@ -3,6 +3,8 @@
 
     <!-- Query all packages so the launcher app grid can list installed apps (API 30+). -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <!-- Update check against GitHub Releases (Setup → About). -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- Bluetooth for a future OBD fallback data source. -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />

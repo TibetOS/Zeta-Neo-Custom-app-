@@ -4,10 +4,12 @@ name: Release APK
 # publishes it on a GitHub Release. The in-app update check (Setup → About)
 # compares the installed version against the latest release tag.
 #
-# Signing (optional but strongly recommended — unsigned APKs can't be
-# installed, and per-run debug keys would break upgrades): add repository
+# Signing: by default the checked-in release-signing.keystore is used, so
+# releases work with zero setup. To use a private key instead, add repository
 # secrets RELEASE_KEYSTORE_BASE64 (base64 of the .keystore file),
-# RELEASE_KEYSTORE_PASSWORD, RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD.
+# RELEASE_KEYSTORE_PASSWORD, RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD — they
+# take priority. Either way, keep the SAME key forever: a signature change
+# forces uninstall/reinstall on the unit.
 on:
   push:
     tags: ["v*"]

@@ -11,16 +11,21 @@ val appVersionName = providers.environmentVariable("APP_VERSION_NAME").orNull
 val appVersionCode = providers.environmentVariable("APP_VERSION_CODE").orNull
     ?.toIntOrNull() ?: 1
 
-// Release signing is optional: configured entirely from the environment
-// (see .github/workflows/release.yml) so no credential lives in the repo.
-// Without it, assembleRelease produces an unsigned APK.
+// Release signing, in priority order: environment (CI secrets, see
+// .github/workflows/release.yml) → the checked-in release-signing.keystore.
+// Committing the keystore is a deliberate convenience for this personal,
+// sideloaded app: it keeps the release signature stable so updates install
+// over each other with zero setup. Tradeoff: anyone with repo access can
+// sign app-compatible APKs — switch to CI secrets if that ever matters.
 fun env(name: String): String? =
     providers.environmentVariable(name).orNull?.takeIf { it.isNotBlank() }
 
-val releaseStoreFile = env("RELEASE_KEYSTORE_FILE")
-val releaseStorePassword = env("RELEASE_KEYSTORE_PASSWORD")
-val releaseKeyAlias = env("RELEASE_KEY_ALIAS")
-val releaseKeyPassword = env("RELEASE_KEY_PASSWORD")
+val defaultKeystore = rootProject.file("release-signing.keystore")
+val releaseStoreFile = env("RELEASE_KEYSTORE_FILE")?.let { file(it) }
+    ?: defaultKeystore.takeIf { it.exists() }
+val releaseStorePassword = env("RELEASE_KEYSTORE_PASSWORD") ?: "outlander-hub"
+val releaseKeyAlias = env("RELEASE_KEY_ALIAS") ?: "outlander"
+val releaseKeyPassword = env("RELEASE_KEY_PASSWORD") ?: "outlander-hub"
 
 android {
     namespace = "com.traffko.outlanderhub"
@@ -35,10 +40,10 @@ android {
         versionName = appVersionName
     }
 
-    if (releaseStoreFile != null && releaseStorePassword != null && releaseKeyAlias != null && releaseKeyPassword != null) {
+    if (releaseStoreFile != null) {
         signingConfigs {
             create("release") {
-                storeFile = file(releaseStoreFile)
+                storeFile = releaseStoreFile
                 storePassword = releaseStorePassword
                 keyAlias = releaseKeyAlias
                 keyPassword = releaseKeyPassword

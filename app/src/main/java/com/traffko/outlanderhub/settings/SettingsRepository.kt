@@ -25,8 +25,7 @@ class SettingsRepository(private val context: Context) {
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
         AppSettings(
-            source = prefs[Keys.SOURCE]?.let { runCatching { VehicleSource.valueOf(it) }.getOrNull() }
-                ?: VehicleSource.DEMO,
+            source = parseVehicleSource(prefs[Keys.SOURCE]),
             showDiagnostics = prefs[Keys.SHOW_DIAGNOSTICS] ?: true,
         )
     }
@@ -39,3 +38,8 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[Keys.SHOW_DIAGNOSTICS] = show }
     }
 }
+
+/** Falls back to DEMO for missing or unknown values (e.g. from an older APK). */
+internal fun parseVehicleSource(raw: String?): VehicleSource =
+    raw?.let { name -> VehicleSource.entries.firstOrNull { it.name == name } }
+        ?: VehicleSource.DEMO

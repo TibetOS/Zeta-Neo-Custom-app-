@@ -24,8 +24,13 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # The wrapper pins the Gradle version (see gradle-wrapper.properties);
+      # the runner's preinstalled `gradle` can silently diverge from it.
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest
+
       - name: Build debug APK
-        run: gradle assembleDebug
+        run: ./gradlew assembleDebug
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

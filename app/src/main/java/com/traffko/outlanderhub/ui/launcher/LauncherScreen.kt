@@ -1,5 +1,9 @@
 package com.traffko.outlanderhub.ui.launcher
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -20,8 +24,10 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
 import com.traffko.outlanderhub.MainViewModel
@@ -47,8 +54,9 @@ import com.traffko.outlanderhub.ui.components.pressable
 import com.traffko.outlanderhub.ui.theme.DisplayM
 import com.traffko.outlanderhub.ui.theme.Hue
 import kotlinx.coroutines.delay
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
@@ -61,7 +69,27 @@ fun LauncherScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val appsRepo = (context.applicationContext as OutlanderApp).installedAppsRepository
     var apps by remember { mutableStateOf<List<LaunchableApp>>(emptyList()) }
-    LaunchedEffect(Unit) { apps = appsRepo.loadApps() }
+    var appsVersion by remember { mutableIntStateOf(0) }
+    LaunchedEffect(appsVersion) { apps = appsRepo.loadApps() }
+
+    // Refresh the grid when packages are installed/removed/updated while the
+    // launcher is showing (otherwise a new app only appears after a tab switch).
+    DisposableEffect(Unit) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context?, intent: Intent?) {
+                appsVersion++
+            }
+        }
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addAction(Intent.ACTION_PACKAGE_CHANGED)
+            addDataScheme("package")
+        }
+        // NOT_EXPORTED still receives system broadcasts; it only blocks other apps.
+        ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        onDispose { context.unregisterReceiver(receiver) }
+    }
 
     val vehicle by viewModel.vehicleState.collectAsStateWithLifecycle()
 
@@ -137,25 +165,26 @@ fun LauncherScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
 }
 
 /**
- * Self-contained ticking clock: keeps the once-per-second recomposition (and
- * the date formatting) local to these two Texts instead of the whole screen,
- * and reuses the formatters and Date across ticks.
+ * Self-contained ticking clock: the display only shows minutes, so ticks are
+ * aligned to the next minute boundary — one recomposition per minute, local
+ * to these two Texts, and always in step with the system clock.
  */
 @Composable
 private fun Clock() {
-    val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-    val dateFormatter = remember { SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()) }
-    val scratchDate = remember { Date() }
+    val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm", Locale.getDefault()) }
+    val dateFormatter = remember { DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault()) }
+    val zone = remember { ZoneId.systemDefault() }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
         while (true) {
-            now = System.currentTimeMillis()
-            delay(1000)
+            val millis = System.currentTimeMillis()
+            now = millis
+            delay(60_000 - millis % 60_000)
         }
     }
     val (timeText, dateText) = remember(now) {
-        scratchDate.time = now
-        timeFormatter.format(scratchDate) to dateFormatter.format(scratchDate)
+        val moment = Instant.ofEpochMilli(now).atZone(zone)
+        timeFormatter.format(moment) to dateFormatter.format(moment)
     }
     Text(
         timeText,

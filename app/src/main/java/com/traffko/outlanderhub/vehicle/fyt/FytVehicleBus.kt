@@ -11,8 +11,6 @@ import com.syu.ipc.IModuleCallback
 import com.syu.ipc.IRemoteModule
 import com.syu.ipc.IRemoteToolkit
 import com.traffko.outlanderhub.vehicle.BusEvent
-import com.traffko.outlanderhub.vehicle.ClimateState
-import com.traffko.outlanderhub.vehicle.DoorState
 import com.traffko.outlanderhub.vehicle.VehicleBus
 import com.traffko.outlanderhub.vehicle.VehicleSource
 import com.traffko.outlanderhub.vehicle.VehicleState
@@ -54,7 +52,12 @@ class FytVehicleBus(private val context: Context) : VehicleBus {
 
     @Volatile private var toolkit: IRemoteToolkit? = null
     @Volatile private var canModule: IRemoteModule? = null
-    @Volatile private var bound = false
+
+    // One connection object per start(): stop() unbinds asynchronously, and a
+    // shared connection would let a stale unbind detach a binding created by
+    // a subsequent start(). Callbacks compare against this field and ignore
+    // anything arriving for a connection that has already been released.
+    @Volatile private var connection: ToolkitConnection? = null
 
     private val callback = object : IModuleCallback.Stub() {
         override fun update(updateCode: Int, ints: IntArray?, flts: FloatArray?, strs: Array<String>?) {
@@ -67,22 +70,23 @@ class FytVehicleBus(private val context: Context) : VehicleBus {
                 strings = strs?.toList() ?: emptyList(),
             )
             _events.tryEmit(event)
-            applySignal(event)
+            _state.update { FytSignalDecoder.apply(it, event) }
         }
     }
 
-    private val connection = object : ServiceConnection {
+    private inner class ToolkitConnection : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             Log.i(TAG, "Toolkit service connected: $name")
             emitInfo("service connected: $name")
-            if (!bound) {
-                // stop() already ran — don't touch the connection.
-                Log.w(TAG, "onServiceConnected after stop(); ignoring")
+            if (connection !== this) {
+                // stop() already released this connection — don't touch it.
+                Log.w(TAG, "onServiceConnected on a released connection; ignoring")
                 return
             }
             try {
-                toolkit = IRemoteToolkit.Stub.asInterface(service)
-                val module = toolkit?.getRemoteModule(FytProtocol.MODULE_CANBUS)
+                val tk = IRemoteToolkit.Stub.asInterface(service)
+                toolkit = tk
+                val module = tk?.getRemoteModule(FytProtocol.MODULE_CANBUS)
                 canModule = module
                 if (module == null) {
                     emitInfo("getRemoteModule(CANBUS) returned null")
@@ -115,21 +119,35 @@ class FytVehicleBus(private val context: Context) : VehicleBus {
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
+            if (connection !== this) return
+            // The binding survives: BIND_AUTO_CREATE restarts the service and
+            // onServiceConnected re-registers the callbacks.
             Log.w(TAG, "Toolkit service disconnected")
             emitInfo("service disconnected")
             toolkit = null
             canModule = null
             _state.update { it.copy(connected = false) }
         }
+
+        override fun onBindingDied(name: ComponentName?) {
+            if (connection !== this) return
+            // Unlike a plain disconnect (host package updated/disabled), this
+            // binding is dead for good — release it and bind again.
+            Log.w(TAG, "Toolkit binding died; rebinding")
+            emitInfo("binding died — rebinding")
+            stop()
+            start()
+        }
     }
 
     override fun start() {
-        if (bound) return
+        if (connection != null) return
+        val conn = ToolkitConnection()
         for (action in FytProtocol.SERVICE_ACTIONS) {
             val intent = Intent(action).setPackage(FytProtocol.HOST_PACKAGE)
             try {
-                if (context.bindService(intent, connection, Context.BIND_AUTO_CREATE)) {
-                    bound = true
+                if (context.bindService(intent, conn, Context.BIND_AUTO_CREATE)) {
+                    connection = conn
                     emitInfo("bindService OK with action=$action")
                     return
                 }
@@ -137,20 +155,24 @@ class FytVehicleBus(private val context: Context) : VehicleBus {
             } catch (e: Exception) {
                 emitInfo("bindService threw for action=$action: $e")
             }
+            // Even a failed bindService leaves the connection registered;
+            // release it before trying the next candidate action.
+            runCatching { context.unbindService(conn) }
         }
         emitInfo("could not bind ${FytProtocol.HOST_PACKAGE} toolkit — is this an FYT unit?")
     }
 
     override fun stop() {
-        if (!bound) return
-        bound = false
+        val conn = connection ?: return
+        connection = null
         registrationJob?.cancel()
         registrationJob = null
         val module = canModule
         toolkit = null
         canModule = null
         // Unregister is another burst of binder calls — do it (and the unbind
-        // that must follow it) off the main thread.
+        // that must follow it) off the main thread. This only ever touches
+        // `conn`, so a start() that runs meanwhile is unaffected.
         scope.launch {
             if (module != null) {
                 for (code in FytProtocol.CAN_SUBSCRIBE_FROM..FytProtocol.CAN_SUBSCRIBE_TO) {
@@ -162,7 +184,7 @@ class FytVehicleBus(private val context: Context) : VehicleBus {
                     }
                 }
             }
-            runCatching { context.unbindService(connection) }
+            runCatching { context.unbindService(conn) }
                 .onFailure { Log.w(TAG, "unbindService failed", it) }
         }
         _state.update { it.copy(connected = false) }
@@ -179,53 +201,6 @@ class FytVehicleBus(private val context: Context) : VehicleBus {
             false
         }
     }
-
-    /** Map a raw CAN-module update onto [VehicleState] per [FytSignalMap]. */
-    private fun applySignal(e: BusEvent) {
-        val i0 = e.ints.getOrNull(0)
-        val f0 = e.floats.getOrNull(0)
-        _state.update { s ->
-            when (e.code) {
-                FytSignalMap.CODE_SPEED -> s.copy(speedKmh = f0 ?: i0?.toFloat())
-                FytSignalMap.CODE_RPM -> s.copy(rpm = i0)
-                FytSignalMap.CODE_BATTERY_VOLTS -> s.copy(batteryVolts = f0 ?: i0?.let { it / 10f })
-                FytSignalMap.CODE_COOLANT_TEMP -> s.copy(coolantTempC = f0 ?: i0?.toFloat())
-                FytSignalMap.CODE_FUEL -> s.copy(fuelPercent = f0 ?: i0?.toFloat())
-                FytSignalMap.CODE_OUTSIDE_TEMP -> s.copy(outsideTempC = f0 ?: i0?.toFloat())
-                FytSignalMap.CODE_ODOMETER -> s.copy(odometerKm = i0)
-                FytSignalMap.CODE_HANDBRAKE -> s.copy(handbrake = i0?.let { it != 0 })
-                FytSignalMap.CODE_SEATBELT -> s.copy(seatbeltDriver = i0?.let { it != 0 })
-                FytSignalMap.CODE_DOORS -> s.copy(doors = decodeDoors(e.ints))
-                FytSignalMap.CODE_CLIMATE -> s.copy(climate = decodeClimate(e.ints, e.floats))
-                FytSignalMap.CODE_TPMS -> s.copy(
-                    tirePressuresKpa = (0..3).map { idx -> e.floats.getOrNull(idx) ?: e.ints.getOrNull(idx)?.toFloat() }
-                )
-                else -> s
-            }.copy(connected = true)
-        }
-    }
-
-    private fun decodeDoors(ints: List<Int>): DoorState {
-        // Common Raise-decoder layout: one bitmask int. Bit order to be
-        // confirmed on the car (open a door, watch Diagnostics).
-        val mask = ints.getOrNull(0) ?: return DoorState()
-        return DoorState(
-            frontLeft = mask and 0x01 != 0,
-            frontRight = mask and 0x02 != 0,
-            rearLeft = mask and 0x04 != 0,
-            rearRight = mask and 0x08 != 0,
-            trunk = mask and 0x10 != 0,
-            hood = mask and 0x20 != 0,
-        )
-    }
-
-    private fun decodeClimate(ints: List<Int>, floats: List<Float>): ClimateState = ClimateState(
-        acOn = ints.getOrNull(0)?.let { it != 0 },
-        tempLeftC = floats.getOrNull(0) ?: ints.getOrNull(1)?.let { it / 2f },
-        tempRightC = floats.getOrNull(1) ?: ints.getOrNull(2)?.let { it / 2f },
-        fanSpeed = ints.getOrNull(3),
-        recirculating = ints.getOrNull(4)?.let { it != 0 },
-    )
 
     private fun emitInfo(message: String) {
         _events.tryEmit(

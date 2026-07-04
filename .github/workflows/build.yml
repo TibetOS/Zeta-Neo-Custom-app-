@@ -1,8 +1,10 @@
 name: Build APK
 
+# push is limited to main: branches with an open PR already build via the
+# pull_request trigger, and running both doubled every CI run.
 on:
   push:
-    branches: ["**"]
+    branches: ["main"]
   pull_request:
   workflow_dispatch:
 

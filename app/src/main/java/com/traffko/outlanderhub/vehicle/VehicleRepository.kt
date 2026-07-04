@@ -1,6 +1,7 @@
 package com.traffko.outlanderhub.vehicle
 
 import android.content.Context
+import android.os.SystemClock
 import com.traffko.outlanderhub.vehicle.fyt.FytVehicleBus
 import com.traffko.outlanderhub.vehicle.fyt.SignalKind
 import kotlinx.coroutines.CoroutineScope
@@ -50,6 +51,10 @@ class VehicleRepository(
     private val logDirty = Channel<Unit>(Channel.CONFLATED)
     // Last payload signature per code, for stamping BusEvent.changed.
     private val lastPayload = HashMap<Int, Int>()
+
+    // Monotonic (elapsedRealtime) — wall time jumps when the unit syncs its
+    // clock from GPS/NTP after boot, which would corrupt silence intervals.
+    @Volatile private var lastEventAtMs = 0L
 
     private val _eventLog = MutableStateFlow(EventLog())
     val eventLog: StateFlow<EventLog> = _eventLog.asStateFlow()
@@ -101,12 +106,8 @@ class VehicleRepository(
         }
         pumpJobs += scope.launch {
             bus.events.collect { event ->
-                synchronized(logLock) {
-                    logBuffer.addLast(stampChanged(event))
-                    if (logBuffer.size > MAX_LOG) logBuffer.removeFirst()
-                    logGeneration++
-                }
-                logDirty.trySend(Unit)
+                lastEventAtMs = SystemClock.elapsedRealtime()
+                appendToLog(event)
             }
         }
         pumpJobs += scope.launch {
@@ -117,6 +118,52 @@ class VehicleRepository(
                 delay(LOG_PUBLISH_MS)
             }
         }
+        if (bus === fytBus) {
+            pumpJobs += scope.launch { watchdogLoop(bus) }
+        }
+    }
+
+    /**
+     * The FYT toolkit is an undocumented service on cheap hardware — it can
+     * silently stop delivering callbacks while the binding looks healthy.
+     * If the bus claims to be connected but no event has arrived for
+     * [WATCHDOG_STALE_MS], rebind and say so in the log.
+     */
+    private suspend fun watchdogLoop(bus: VehicleBus) {
+        lastEventAtMs = SystemClock.elapsedRealtime()
+        while (true) {
+            delay(WATCHDOG_PERIOD_MS)
+            if (!_state.value.connected) {
+                // Not bound (car off, service gone): silence is expected.
+                // Keep the timer fresh so a reconnect isn't instantly judged
+                // stale before it has had a chance to deliver anything.
+                lastEventAtMs = SystemClock.elapsedRealtime()
+                continue
+            }
+            val silenceMs = SystemClock.elapsedRealtime() - lastEventAtMs
+            if (silenceMs > WATCHDOG_STALE_MS) {
+                appendToLog(
+                    BusEvent(
+                        timestampMs = System.currentTimeMillis(),
+                        channel = "watchdog-info",
+                        code = -1,
+                        strings = listOf("no CAN traffic for ${silenceMs / 1000}s — rebinding"),
+                    )
+                )
+                bus.stop()
+                bus.start()
+                lastEventAtMs = SystemClock.elapsedRealtime()
+            }
+        }
+    }
+
+    private fun appendToLog(event: BusEvent) {
+        synchronized(logLock) {
+            logBuffer.addLast(stampChanged(event))
+            if (logBuffer.size > MAX_LOG) logBuffer.removeFirst()
+            logGeneration++
+        }
+        logDirty.trySend(Unit)
     }
 
     private fun publishLog() {
@@ -161,5 +208,7 @@ class VehicleRepository(
     private companion object {
         const val MAX_LOG = 400
         const val LOG_PUBLISH_MS = 100L
+        const val WATCHDOG_PERIOD_MS = 30_000L
+        const val WATCHDOG_STALE_MS = 120_000L
     }
 }

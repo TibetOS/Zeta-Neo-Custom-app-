@@ -6,9 +6,11 @@ fitted with a **Zeta Neo 14** Android head unit (FYT platform).
 ## Features
 
 - **Home (launcher)** — replaces the stock Zeta launcher: big clock, quick vehicle
-  stats (outside temp, fuel, battery), door-open warning, and a grid of all
-  installed apps. The app registers as an Android HOME activity, so it can be
-  chosen as the default launcher.
+  stats (outside temp, fuel, battery), a trip computer (distance / driving time /
+  average speed, integrated from speed samples — works without an odometer
+  signal), door-open warning, and a grid of all installed apps. The app
+  registers as an Android HOME activity, so it can be chosen as the default
+  launcher.
 - **Dash** — live gauges: speed, RPM (with redline zone), coolant temperature,
   battery voltage, fuel, odometer, gear.
 - **Car** — body status: doors/trunk, handbrake, seatbelt, climate readout and
@@ -33,8 +35,23 @@ fitted with a **Zeta Neo 14** Android head unit (FYT platform).
 # APK lands in app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Or push to GitHub — the **Build APK** workflow compiles every commit and uploads
-the APK as an artifact (Actions tab → latest run → `outlander-hub-debug`).
+Or push to GitHub — the **Build APK** workflow compiles every pull request and
+every push to `main`, uploading the APK as an artifact (Actions tab → latest
+run → `outlander-hub-debug`).
+
+## Releases & updates
+
+Tag a commit `vX.Y.Z` and push the tag — the **Release APK** workflow builds
+the release APK and publishes it on a GitHub Release. On the unit,
+Setup → About → **Check for updates** compares the installed version against
+the latest release and links straight to the APK download.
+
+Release signing is driven by repository secrets (`RELEASE_KEYSTORE_BASE64`,
+`RELEASE_KEYSTORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD` —
+see `.github/workflows/release.yml`). Without them the release APK is
+unsigned (not installable), so configure the keystore before tagging. Keep
+using the same keystore forever: a signature change forces uninstall/reinstall
+on the unit, losing settings and signal mappings.
 
 ## Installing on the Zeta Neo 14
 

@@ -35,8 +35,9 @@ fitted with a **Zeta Neo 14** Android head unit (FYT platform).
 # APK lands in app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Or push to GitHub — the **Build APK** workflow compiles every commit and uploads
-the APK as an artifact (Actions tab → latest run → `outlander-hub-debug`).
+Or push to GitHub — the **Build APK** workflow compiles every pull request and
+every push to `main`, uploading the APK as an artifact (Actions tab → latest
+run → `outlander-hub-debug`).
 
 ## Releases & updates
 

@@ -59,6 +59,14 @@ object FytSignalMap {
     const val CODE_ODOMETER = 37
     const val CODE_HANDBRAKE = 38
     const val CODE_SEATBELT = 39
+
+    /**
+     * Gear position. GUESS — no observed code yet, placed after the drive
+     * block so the Dash PRND strip has a chance of lighting up. Validate in
+     * the car (shift P→R→N→D, watch which code fires in the CAN tab) and
+     * correct both this constant and [FytSignalDecoder.decodeGear].
+     */
+    const val CODE_GEAR = 40
     const val CODE_CLIMATE = 48
     const val CODE_TPMS = 64
 }

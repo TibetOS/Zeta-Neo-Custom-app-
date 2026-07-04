@@ -45,6 +45,16 @@ data class VehicleState(
 )
 
 /**
+ * Snapshot of the diagnostics log. [generation] increases on every underlying
+ * bus event (also when the log is full and the list content merely rotates),
+ * so consumers can key follow-behavior on it rather than on the list size.
+ */
+data class EventLog(
+    val events: List<BusEvent> = emptyList(),
+    val generation: Long = 0L,
+)
+
+/**
  * A raw event from the underlying bus, kept for the diagnostics screen so
  * unknown CAN-decoder signals can be observed and mapped.
  */

@@ -34,9 +34,14 @@ import com.traffko.outlanderhub.ui.components.MicroLabel
 import com.traffko.outlanderhub.ui.components.glassPanel
 import com.traffko.outlanderhub.ui.components.pressable
 import com.traffko.outlanderhub.ui.theme.Hue
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
+
+// DateTimeFormatter (unlike SimpleDateFormat) is immutable and thread-safe,
+// so rows can format timestamps with no shared mutable scratch state.
+private val TimestampFormatter = DateTimeFormatter.ofPattern("HH:mm:ss.SSS", Locale.US)
 
 /**
  * Live view of raw CAN-decoder traffic, styled as a quiet terminal panel.
@@ -47,22 +52,21 @@ import java.util.Locale
 fun DiagnosticsScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
     val log by viewModel.eventLog.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
-    val dateFormatter = remember { SimpleDateFormat("HH:mm:ss.SSS", Locale.US) }
-    // Reused per row: only visible rows are composed, and reusing one Date
-    // keeps a chatty bus from generating allocation churn while scrolling.
-    val scratchDate = remember { Date() }
+    val zone = remember { ZoneId.systemDefault() }
 
     // Instant (non-animated) scroll: overlapping animations freeze the UI
-    // when the CAN bus is chatty.
-    LaunchedEffect(log.size) {
-        if (log.isNotEmpty()) listState.scrollToItem(log.lastIndex)
+    // when the CAN bus is chatty. Keyed on the generation counter, not the
+    // list size — once the log reaches its cap the size stops changing, but
+    // events keep rotating through and the view must keep following.
+    LaunchedEffect(log.generation) {
+        if (log.events.isNotEmpty()) listState.scrollToItem(log.events.lastIndex)
     }
 
     Column(modifier, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("CAN bus", fontSize = 30.sp, fontWeight = FontWeight.Light, color = Hue.TextPrimary)
             Spacer(Modifier.weight(1f))
-            MicroLabel("${log.size} events")
+            MicroLabel("${log.events.size} events")
             Spacer(Modifier.width(20.dp))
             GhostButton("Clear") { viewModel.clearEventLog() }
         }
@@ -75,9 +79,8 @@ fun DiagnosticsScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                 .glassPanel(corner = 18.dp, fill = Color(0xFF0A0C0F))
                 .padding(horizontal = 16.dp, vertical = 12.dp),
         ) {
-            items(log) { event ->
-                scratchDate.time = event.timestampMs
-                val time = dateFormatter.format(scratchDate)
+            items(log.events) { event ->
+                val time = TimestampFormatter.format(Instant.ofEpochMilli(event.timestampMs).atZone(zone))
                 Text(
                     "$time  ${event.pretty()}",
                     fontFamily = FontFamily.Monospace,

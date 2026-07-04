@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,6 +68,12 @@ enum class Screen(val label: String, val icon: ImageVector) {
 fun AppRoot(viewModel: MainViewModel) {
     var current by remember { mutableStateOf(Screen.Home) }
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+
+    // If the CAN tab gets hidden while it's the active screen, don't strand
+    // the user on a screen the dock no longer shows.
+    LaunchedEffect(settings.showDiagnostics) {
+        if (!settings.showDiagnostics && current == Screen.Diagnostics) current = Screen.Home
+    }
 
     Box(
         Modifier

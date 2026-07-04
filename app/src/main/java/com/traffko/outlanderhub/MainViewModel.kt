@@ -4,7 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.traffko.outlanderhub.settings.AppSettings
-import com.traffko.outlanderhub.vehicle.BusEvent
+import com.traffko.outlanderhub.vehicle.EventLog
 import com.traffko.outlanderhub.vehicle.VehicleSource
 import com.traffko.outlanderhub.vehicle.VehicleState
 import kotlinx.coroutines.flow.SharingStarted
@@ -19,7 +19,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsRepo = app.settingsRepository
 
     val vehicleState: StateFlow<VehicleState> = vehicles.state
-    val eventLog: StateFlow<List<BusEvent>> = vehicles.eventLog
+    val eventLog: StateFlow<EventLog> = vehicles.eventLog
     val activeSource: StateFlow<VehicleSource> = vehicles.activeSource
 
     val settings: StateFlow<AppSettings> = settingsRepo.settings

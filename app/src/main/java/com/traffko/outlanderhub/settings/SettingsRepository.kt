@@ -14,6 +14,7 @@ private val Context.dataStore by preferencesDataStore(name = "settings")
 data class AppSettings(
     val source: VehicleSource = VehicleSource.DEMO,
     val showDiagnostics: Boolean = true,
+    val overlayEnabled: Boolean = false,
 )
 
 class SettingsRepository(private val context: Context) {
@@ -21,12 +22,14 @@ class SettingsRepository(private val context: Context) {
     private object Keys {
         val SOURCE = stringPreferencesKey("vehicle_source")
         val SHOW_DIAGNOSTICS = booleanPreferencesKey("show_diagnostics")
+        val OVERLAY_ENABLED = booleanPreferencesKey("overlay_enabled")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
         AppSettings(
             source = parseVehicleSource(prefs[Keys.SOURCE]),
             showDiagnostics = prefs[Keys.SHOW_DIAGNOSTICS] ?: true,
+            overlayEnabled = prefs[Keys.OVERLAY_ENABLED] ?: false,
         )
     }
 
@@ -36,6 +39,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setShowDiagnostics(show: Boolean) {
         context.dataStore.edit { it[Keys.SHOW_DIAGNOSTICS] = show }
+    }
+
+    suspend fun setOverlayEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.OVERLAY_ENABLED] = enabled }
     }
 }
 

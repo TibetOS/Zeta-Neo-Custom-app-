@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Outlander Hub</string>
+    <string name="overlay_channel_name">Vehicle overlay</string>
+    <string name="overlay_notification_title">Vehicle overlay active</string>
 </resources>

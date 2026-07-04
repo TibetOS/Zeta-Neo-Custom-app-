@@ -17,6 +17,12 @@ fitted with a **Zeta Neo 14** Android head unit (FYT platform).
   Outlander decoder signals (see below). Includes a manual command sender.
 - **Setup** — switch between the *Demo* data source (simulated drive, for testing
   the UI anywhere) and the *Zeta CAN decoder* source.
+- **Overlay** — optional floating vehicle pill (speed, fuel, alerts) drawn over
+  other apps, most usefully over the CarPlay/ZLink projection where vehicle
+  data is otherwise invisible. Tap to expand, drag to move; door/seatbelt/
+  coolant/tire alerts auto-expand it. Enable in Setup (requires the
+  "display over other apps" permission; the overlay hides automatically while
+  Outlander Hub itself is on screen).
 
 ## Building
 

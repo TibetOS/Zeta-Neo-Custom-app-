@@ -40,6 +40,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsRepo.setShowDiagnostics(show) }
     }
 
+    fun setOverlayEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepo.setOverlayEnabled(enabled) }
+    }
+
     fun sendCommand(code: Int, vararg ints: Int): Boolean =
         vehicles.sendCommand(code, ints)
 

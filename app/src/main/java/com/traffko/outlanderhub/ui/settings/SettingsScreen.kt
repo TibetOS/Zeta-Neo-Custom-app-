@@ -1,5 +1,8 @@
 package com.traffko.outlanderhub.ui.settings
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
@@ -24,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -87,6 +91,43 @@ fun SettingsScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
             TeslaSwitch(
                 checked = settings.showDiagnostics,
                 onToggle = { viewModel.setShowDiagnostics(it) },
+            )
+        }
+
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .glassPanel()
+                .padding(22.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val context = LocalContext.current
+            Column(Modifier.weight(1f)) {
+                Text("Floating overlay", fontSize = 17.sp, color = Hue.TextPrimary)
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    "Vehicle pill shown over other apps (e.g. CarPlay projection). " +
+                        "Needs the \"display over other apps\" permission.",
+                    color = Hue.TextTertiary,
+                    fontSize = 13.sp,
+                )
+            }
+            TeslaSwitch(
+                checked = settings.overlayEnabled,
+                onToggle = { enabled ->
+                    if (enabled && !Settings.canDrawOverlays(context)) {
+                        // Send the user to the system permission screen; the
+                        // service starts once permission exists and the app
+                        // returns to the foreground.
+                        context.startActivity(
+                            Intent(
+                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:${context.packageName}"),
+                            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    }
+                    viewModel.setOverlayEnabled(enabled)
+                },
             )
         }
 

@@ -20,12 +20,23 @@ val appVersionCode = providers.environmentVariable("APP_VERSION_CODE").orNull
 fun env(name: String): String? =
     providers.environmentVariable(name).orNull?.takeIf { it.isNotBlank() }
 
-val defaultKeystore = rootProject.file("release-signing.keystore")
-val releaseStoreFile = env("RELEASE_KEYSTORE_FILE")?.let { file(it) }
-    ?: defaultKeystore.takeIf { it.exists() }
-val releaseStorePassword = env("RELEASE_KEYSTORE_PASSWORD") ?: "outlander-hub"
-val releaseKeyAlias = env("RELEASE_KEY_ALIAS") ?: "outlander"
-val releaseKeyPassword = env("RELEASE_KEY_PASSWORD") ?: "outlander-hub"
+// The built-in credentials belong to the checked-in keystore ONLY. When a
+// custom keystore comes from the environment, its passwords must too — a
+// partial secret set should fail loudly, not fall back to the defaults and
+// produce a baffling "keystore password was incorrect".
+val envKeystorePath = env("RELEASE_KEYSTORE_FILE")
+fun requiredSigningEnv(name: String): String =
+    env(name) ?: error("RELEASE_KEYSTORE_FILE is set but $name is missing")
+
+val releaseStoreFile =
+    if (envKeystorePath != null) file(envKeystorePath)
+    else rootProject.file("release-signing.keystore").takeIf { it.exists() }
+val releaseStorePassword =
+    if (envKeystorePath != null) requiredSigningEnv("RELEASE_KEYSTORE_PASSWORD") else "outlander-hub"
+val releaseKeyAlias =
+    if (envKeystorePath != null) requiredSigningEnv("RELEASE_KEY_ALIAS") else "outlander"
+val releaseKeyPassword =
+    if (envKeystorePath != null) requiredSigningEnv("RELEASE_KEY_PASSWORD") else "outlander-hub"
 
 android {
     namespace = "com.traffko.outlanderhub"

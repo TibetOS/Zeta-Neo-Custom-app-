@@ -8,118 +8,247 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.traffko.outlanderhub.MainViewModel
+import com.traffko.outlanderhub.ui.components.MicroLabel
+import com.traffko.outlanderhub.ui.components.PulseDot
+import com.traffko.outlanderhub.ui.theme.DisplayM
+import com.traffko.outlanderhub.ui.theme.DisplayXL
 import com.traffko.outlanderhub.ui.theme.GaugeDanger
 import com.traffko.outlanderhub.ui.theme.GaugeGood
 import com.traffko.outlanderhub.ui.theme.GaugeWarn
-import com.traffko.outlanderhub.vehicle.VehicleState
+import com.traffko.outlanderhub.ui.theme.Hue
 
+/**
+ * Tesla-style driving view: one enormous speed numeral in the middle of a
+ * black canvas, a PRND strip, a gradient RPM power bar with redline, and
+ * quiet flanking stats. No gauges shouting for attention.
+ */
 @Composable
 fun DashboardScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
     val vehicle by viewModel.vehicleState.collectAsStateWithLifecycle()
 
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            ArcGauge(
-                value = vehicle.speedKmh ?: 0f,
-                max = 220f,
-                label = "km/h",
-                title = "Speed",
-                modifier = Modifier.weight(1.4f),
-                bigText = vehicle.speedKmh?.let { "%.0f".format(it) } ?: "--",
-            )
-            ArcGauge(
-                value = (vehicle.rpm ?: 0).toFloat(),
-                max = 7000f,
-                label = "rpm",
-                title = "Engine",
-                modifier = Modifier.weight(1.4f),
-                bigText = vehicle.rpm?.toString() ?: "--",
-                dangerFrom = 5500f,
-            )
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                StatCard(
-                    title = "Coolant",
-                    value = vehicle.coolantTempC?.let { "%.0f°C".format(it) } ?: "--",
-                    tone = toneForRange(vehicle.coolantTempC, warn = 105f, danger = 115f),
-                    modifier = Modifier.weight(1f),
-                )
-                val volts = vehicle.batteryVolts
-                StatCard(
-                    title = "Battery",
-                    value = volts?.let { "%.1f V".format(it) } ?: "--",
-                    tone = when {
-                        volts == null -> null
-                        volts < 11.8f -> GaugeDanger
-                        volts < 12.4f -> GaugeWarn
-                        else -> GaugeGood
-                    },
-                    modifier = Modifier.weight(1f),
-                )
-            }
+    Column(modifier) {
+        // Status line
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            PulseDot(if (vehicle.connected) GaugeGood else GaugeDanger)
+            Spacer(Modifier.width(10.dp))
+            MicroLabel(if (vehicle.connected) vehicle.source.name.replace('_', ' ') else "Offline")
+            Spacer(Modifier.weight(1f))
+            MicroLabel(vehicle.odometerKm?.let { "%,d km".format(it) } ?: "")
         }
 
         Row(
             Modifier
                 .fillMaxWidth()
-                .height(110.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                .weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            StatCard(
-                title = "Fuel",
-                value = vehicle.fuelPercent?.let { "%.0f%%".format(it) } ?: "--",
-                tone = toneForLow(vehicle.fuelPercent, warn = 20f, danger = 10f),
-                modifier = Modifier.weight(1f),
-            )
-            StatCard(
-                title = "Outside",
-                value = vehicle.outsideTempC?.let { "%.1f°C".format(it) } ?: "--",
-                modifier = Modifier.weight(1f),
-            )
-            StatCard(
-                title = "Odometer",
-                value = vehicle.odometerKm?.let { "%,d km".format(it) } ?: "--",
-                modifier = Modifier.weight(1f),
-            )
-            StatCard(
-                title = "Gear",
-                value = vehicle.gear ?: "--",
-                modifier = Modifier.weight(1f),
-            )
-            StatCard(
-                title = "Source",
-                value = if (vehicle.connected) vehicle.source.name else "OFFLINE",
-                tone = if (vehicle.connected) GaugeGood else GaugeDanger,
-                modifier = Modifier.weight(1f),
+            // Left stats
+            Column(
+                Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(30.dp),
+            ) {
+                SideStat(
+                    label = "Coolant",
+                    value = vehicle.coolantTempC?.let { "%.0f".format(it) } ?: "--",
+                    unit = "°C",
+                    tone = toneForRange(vehicle.coolantTempC, warn = 105f, danger = 115f),
+                )
+                SideStat(
+                    label = "Battery",
+                    value = vehicle.batteryVolts?.let { "%.1f".format(it) } ?: "--",
+                    unit = "V",
+                    tone = vehicle.batteryVolts?.let {
+                        when {
+                            it < 11.8f -> GaugeDanger
+                            it < 12.4f -> GaugeWarn
+                            else -> null
+                        }
+                    },
+                )
+            }
+
+            // Center: gear strip + speed + RPM power bar
+            Column(
+                Modifier.weight(2.3f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                GearStrip(vehicle.gear)
+                Text(
+                    vehicle.speedKmh?.let { "%.0f".format(it) } ?: "--",
+                    style = DisplayXL,
+                )
+                MicroLabel("km/h")
+                Spacer(Modifier.height(26.dp))
+                PowerBar(
+                    rpm = vehicle.rpm,
+                    max = 7000f,
+                    redlineFrom = 5500f,
+                    modifier = Modifier
+                        .fillMaxWidth(0.72f)
+                        .height(30.dp),
+                )
+            }
+
+            // Right stats
+            Column(
+                Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(30.dp),
+                horizontalAlignment = Alignment.End,
+            ) {
+                SideStat(
+                    label = "Fuel",
+                    value = vehicle.fuelPercent?.let { "%.0f".format(it) } ?: "--",
+                    unit = "%",
+                    tone = toneForLow(vehicle.fuelPercent, warn = 20f, danger = 10f),
+                    alignEnd = true,
+                )
+                SideStat(
+                    label = "Outside",
+                    value = vehicle.outsideTempC?.let { "%.1f".format(it) } ?: "--",
+                    unit = "°C",
+                    alignEnd = true,
+                )
+            }
+        }
+        Spacer(Modifier.height(18.dp))
+    }
+}
+
+@Composable
+private fun GearStrip(gear: String?) {
+    val active = gear?.trim()?.take(1)?.uppercase()
+    Row(horizontalArrangement = Arrangement.spacedBy(26.dp)) {
+        listOf("P", "R", "N", "D").forEach { g ->
+            val selected = g == active
+            Text(
+                g,
+                fontSize = if (selected) 26.sp else 20.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (selected) Hue.TextPrimary else Hue.TextTertiary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.width(26.dp),
             )
         }
+    }
+}
+
+@Composable
+private fun SideStat(
+    label: String,
+    value: String,
+    unit: String,
+    tone: Color? = null,
+    alignEnd: Boolean = false,
+) {
+    Column(horizontalAlignment = if (alignEnd) Alignment.End else Alignment.Start) {
+        MicroLabel(label)
+        Spacer(Modifier.height(6.dp))
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(value, style = DisplayM, color = tone ?: Hue.TextPrimary)
+            Spacer(Modifier.width(6.dp))
+            Text(
+                unit,
+                fontSize = 16.sp,
+                color = Hue.TextSecondary,
+                modifier = Modifier.padding(bottom = 5.dp),
+            )
+        }
+        // Warning underline only when something needs attention
+        if (tone != null && tone != GaugeGood) {
+            Spacer(Modifier.height(6.dp))
+            Box(Modifier.width(44.dp)) {
+                Canvas(Modifier.fillMaxWidth().height(3.dp)) {
+                    drawRoundRect(tone, cornerRadius = CornerRadius(2f))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Horizontal RPM bar: blue gradient fill with a glowing tip, hairline track,
+ * redline segment marked in red. Reads like Tesla's power meter.
+ */
+@Composable
+private fun PowerBar(
+    rpm: Int?,
+    max: Float,
+    redlineFrom: Float,
+    modifier: Modifier = Modifier,
+) {
+    val fraction by animateFloatAsState(
+        targetValue = ((rpm ?: 0) / max).coerceIn(0f, 1f),
+        animationSpec = tween(180),
+        label = "rpm",
+    )
+    val redlineFraction = (redlineFrom / max).coerceIn(0f, 1f)
+    val overRedline = fraction >= redlineFraction
+
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Canvas(
+            Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+        ) {
+            val r = CornerRadius(size.height / 2f)
+            // Track
+            drawRoundRect(color = Color(0xFF191D23), cornerRadius = r)
+            // Redline zone on the track
+            drawRoundRect(
+                color = Hue.Red.copy(alpha = 0.30f),
+                topLeft = Offset(size.width * redlineFraction, 0f),
+                size = Size(size.width * (1f - redlineFraction), size.height),
+                cornerRadius = r,
+            )
+            if (fraction > 0.005f) {
+                val w = size.width * fraction
+                drawRoundRect(
+                    brush = Brush.horizontalGradient(
+                        colors = if (overRedline)
+                            listOf(Hue.Blue, Hue.BlueBright, Hue.Red)
+                        else
+                            listOf(Hue.Blue.copy(alpha = 0.55f), Hue.BlueBright),
+                        endX = w,
+                    ),
+                    size = Size(w, size.height),
+                    cornerRadius = r,
+                )
+                // Glowing tip
+                drawCircle(
+                    color = (if (overRedline) Hue.Red else Hue.BlueBright).copy(alpha = 0.35f),
+                    radius = size.height * 1.6f,
+                    center = Offset(w, size.height / 2f),
+                )
+                drawCircle(
+                    color = if (overRedline) Hue.Red else Color.White,
+                    radius = size.height * 0.55f,
+                    center = Offset(w, size.height / 2f),
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        MicroLabel(rpm?.let { "%,d rpm".format(it) } ?: "-- rpm")
     }
 }
 
@@ -127,127 +256,12 @@ private fun toneForRange(value: Float?, warn: Float, danger: Float): Color? = wh
     value == null -> null
     value >= danger -> GaugeDanger
     value >= warn -> GaugeWarn
-    else -> GaugeGood
+    else -> null
 }
 
 private fun toneForLow(value: Float?, warn: Float, danger: Float): Color? = when {
     value == null -> null
     value <= danger -> GaugeDanger
     value <= warn -> GaugeWarn
-    else -> GaugeGood
-}
-
-@Composable
-private fun StatCard(
-    title: String,
-    value: String,
-    modifier: Modifier = Modifier,
-    tone: Color? = null,
-) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-    ) {
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Text(title, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
-            Spacer(Modifier.height(4.dp))
-            Text(
-                value,
-                fontSize = 30.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = tone ?: MaterialTheme.colorScheme.onSurface,
-            )
-        }
-    }
-}
-
-/**
- * 270° sweep arc gauge drawn with Canvas — designed to stay smooth on the
- * head unit's mid-range GPU.
- */
-@Composable
-private fun ArcGauge(
-    value: Float,
-    max: Float,
-    label: String,
-    title: String,
-    bigText: String,
-    modifier: Modifier = Modifier,
-    dangerFrom: Float? = null,
-) {
-    val animated by animateFloatAsState(
-        targetValue = (value / max).coerceIn(0f, 1f),
-        animationSpec = tween(220),
-        label = "gauge",
-    )
-    val track = MaterialTheme.colorScheme.surfaceVariant
-    val accent = MaterialTheme.colorScheme.primary
-    val dangerFraction = dangerFrom?.let { (it / max).coerceIn(0f, 1f) }
-
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-    ) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Canvas(
-                Modifier
-                    .fillMaxSize()
-                    .padding(24.dp)
-                    .aspectRatio(1f, matchHeightConstraintsFirst = true)
-            ) {
-                val stroke = Stroke(width = size.minDimension * 0.07f, cap = StrokeCap.Round)
-                val inset = stroke.width / 2
-                val arcSize = Size(size.width - stroke.width, size.height - stroke.width)
-                val topLeft = Offset(inset, inset)
-                // Track
-                drawArc(
-                    color = track,
-                    startAngle = 135f,
-                    sweepAngle = 270f,
-                    useCenter = false,
-                    topLeft = topLeft,
-                    size = arcSize,
-                    style = stroke,
-                )
-                // Danger zone
-                if (dangerFraction != null) {
-                    drawArc(
-                        color = GaugeDanger.copy(alpha = 0.35f),
-                        startAngle = 135f + 270f * dangerFraction,
-                        sweepAngle = 270f * (1f - dangerFraction),
-                        useCenter = false,
-                        topLeft = topLeft,
-                        size = arcSize,
-                        style = stroke,
-                    )
-                }
-                // Value
-                drawArc(
-                    color = accent,
-                    startAngle = 135f,
-                    sweepAngle = 270f * animated,
-                    useCenter = false,
-                    topLeft = topLeft,
-                    size = arcSize,
-                    style = stroke,
-                )
-            }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(bigText, fontSize = 54.sp, fontWeight = FontWeight.Bold)
-                Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Text(
-                title,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 14.dp),
-            )
-        }
-    }
+    else -> null
 }

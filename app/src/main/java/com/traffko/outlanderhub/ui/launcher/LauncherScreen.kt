@@ -179,7 +179,10 @@ private fun Clock() {
         while (true) {
             val millis = System.currentTimeMillis()
             now = millis
-            delay(60_000 - millis % 60_000)
+            // The small buffer absorbs scheduling jitter: delay() and
+            // currentTimeMillis() don't share a clock base, and waking a few
+            // ms *before* the boundary would spin on near-zero delays.
+            delay(60_000 - millis % 60_000 + 250)
         }
     }
     val (timeText, dateText) = remember(now) {

@@ -140,7 +140,11 @@ class FytVehicleBus(private val context: Context) : VehicleBus {
         }
     }
 
-    override fun start() {
+    // start/stop are synchronized: all current callers are main-thread
+    // confined, but nothing in the VehicleBus contract promises that, and an
+    // interleaved start/start or start/stop would double-bind or strand a
+    // connection.
+    override fun start(): Unit = synchronized(this) {
         if (connection != null) return
         val conn = ToolkitConnection()
         for (action in FytProtocol.SERVICE_ACTIONS) {
@@ -162,7 +166,7 @@ class FytVehicleBus(private val context: Context) : VehicleBus {
         emitInfo("could not bind ${FytProtocol.HOST_PACKAGE} toolkit — is this an FYT unit?")
     }
 
-    override fun stop() {
+    override fun stop(): Unit = synchronized(this) {
         val conn = connection ?: return
         connection = null
         registrationJob?.cancel()

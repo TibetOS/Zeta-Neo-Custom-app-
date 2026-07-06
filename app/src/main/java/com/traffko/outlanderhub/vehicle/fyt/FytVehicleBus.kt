@@ -166,15 +166,17 @@ class FytVehicleBus(
         // surfaces what the unit exposes (in Diagnostics) and can connect
         // without a hardcoded action.
         val components = hostServiceComponents()
-        if (components.isEmpty()) {
-            emitInfo("could not bind ${FytProtocol.HOST_PACKAGE} toolkit — is this an FYT unit?")
-            return
+        if (components.isNotEmpty()) {
+            emitInfo("trying ${components.size} ${FytProtocol.HOST_PACKAGE} service component(s)")
+            for (component in components) {
+                if (tryBind(conn, Intent().setComponent(component), "component=${component.shortClassName}")) return
+            }
+            emitInfo("bound to none of ${FytProtocol.HOST_PACKAGE}'s services — the toolkit may not be exported on this firmware")
         }
-        emitInfo("trying ${components.size} ${FytProtocol.HOST_PACKAGE} service component(s)")
-        for (component in components) {
-            if (tryBind(conn, Intent().setComponent(component), "component=${component.shortClassName}")) return
-        }
-        emitInfo("bound to none of ${FytProtocol.HOST_PACKAGE}'s services — the toolkit may not be exported on this firmware")
+
+        // Nothing bound (likely not a com.syu.ms unit): enumerate what CAN /
+        // vehicle services this firmware DOES expose, to find the real host.
+        scanForCandidateServices()
     }
 
     /** One bind attempt; on success records [connection] and returns true. */
@@ -255,6 +257,61 @@ class FytVehicleBus(
                 code = -1,
                 strings = listOf(message),
             )
+        )
+    }
+
+    /**
+     * With no com.syu.ms toolkit present, list packages/services on this unit
+     * whose name hints at a CAN or vehicle bridge, so the real host can be
+     * spotted in the CAN tab and targeted in FytProtocol.
+     */
+    private fun scanForCandidateServices() {
+        val pm = context.packageManager
+        val withServices = try {
+            pm.getInstalledPackages(PackageManager.GET_SERVICES)
+        } catch (e: Exception) {
+            emitInfo("service scan hit ${e.javaClass.simpleName}; falling back to package names")
+            null
+        }
+        if (withServices != null) {
+            emitInfo("scanning ${withServices.size} packages for a CAN/vehicle service")
+            var hits = 0
+            for (pkg in withServices) {
+                val matched = pkg.services?.filter { svc ->
+                    CAN_KEYWORDS.any { svc.name.contains(it, true) || pkg.packageName.contains(it, true) }
+                }.orEmpty()
+                if (matched.isNotEmpty()) {
+                    hits++
+                    emitInfo("${pkg.packageName} → ${matched.joinToString { it.name.substringAfterLast('.') }}")
+                }
+            }
+            emitInfo(
+                if (hits == 0) "no CAN/vehicle service matched — Export the log or use an OBD-II dongle"
+                else "found $hits candidate package(s) above — share them so I can target the CAN one",
+            )
+            return
+        }
+
+        // Fallback: names only, to avoid TransactionTooLargeException on big lists.
+        val names = try {
+            pm.getInstalledPackages(0)
+        } catch (e: Exception) {
+            emitInfo("could not list installed packages: $e")
+            return
+        }
+        val candidates = names.map { it.packageName }
+            .filter { name -> CAN_KEYWORDS.any { name.contains(it, true) } }
+        emitInfo(
+            if (candidates.isEmpty()) "no CAN/vehicle package matched among ${names.size} packages — Export or use OBD-II"
+            else "candidate packages: ${candidates.joinToString()}",
+        )
+    }
+
+    private companion object {
+        // Package- or service-name fragments that hint at a CAN / vehicle bridge.
+        val CAN_KEYWORDS = listOf(
+            "canbus", "can", "vehicle", "toolkit", "syu", "microntek",
+            "obd", "raise", "hiworld", "hzbhd", "txznet", "hsae", "autochips", "mcu",
         )
     }
 }

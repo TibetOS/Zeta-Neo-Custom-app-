@@ -63,6 +63,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Sign debug with the checked-in keystore too, so every debug build
+            // shares one signature and installs over the previous one without a
+            // manual uninstall (CI's default debug key is random per run).
+            signingConfig = signingConfigs.findByName("release")
+        }
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")

@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.content.pm.PackageManager
 import android.os.IBinder
 import android.os.RemoteException
 import android.util.Log
@@ -47,7 +48,11 @@ class FytVehicleBus(
     private val _state = MutableStateFlow(VehicleState(source = VehicleSource.FYT_CAN))
     override val state: StateFlow<VehicleState> = _state.asStateFlow()
 
-    private val _events = MutableSharedFlow<BusEvent>(extraBufferCapacity = 512)
+    // replay: start() emits its one-shot bind diagnostics synchronously,
+    // before VehicleRepository's log collector attaches on a source switch.
+    // Without replay those lines — the only clue when binding fails — reach no
+    // subscriber and are lost, leaving the CAN tab blank.
+    private val _events = MutableSharedFlow<BusEvent>(replay = 128, extraBufferCapacity = 512)
     override val events: SharedFlow<BusEvent> = _events.asSharedFlow()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -150,23 +155,56 @@ class FytVehicleBus(
     override fun start(): Unit = synchronized(this) {
         if (connection != null) return
         val conn = ToolkitConnection()
+
+        // Known intent actions first — the fast path on recognised firmwares.
         for (action in FytProtocol.SERVICE_ACTIONS) {
-            val intent = Intent(action).setPackage(FytProtocol.HOST_PACKAGE)
-            try {
-                if (context.bindService(intent, conn, Context.BIND_AUTO_CREATE)) {
-                    connection = conn
-                    emitInfo("bindService OK with action=$action")
-                    return
-                }
-                emitInfo("bindService returned false for action=$action")
-            } catch (e: Exception) {
-                emitInfo("bindService threw for action=$action: $e")
-            }
-            // Even a failed bindService leaves the connection registered;
-            // release it before trying the next candidate action.
-            runCatching { context.unbindService(conn) }
+            if (tryBind(conn, Intent(action).setPackage(FytProtocol.HOST_PACKAGE), "action=$action")) return
         }
-        emitInfo("could not bind ${FytProtocol.HOST_PACKAGE} toolkit — is this an FYT unit?")
+
+        // Unknown firmware: enumerate whatever services the host package
+        // actually declares and bind them by explicit component. This both
+        // surfaces what the unit exposes (in Diagnostics) and can connect
+        // without a hardcoded action.
+        val components = hostServiceComponents()
+        if (components.isEmpty()) {
+            emitInfo("could not bind ${FytProtocol.HOST_PACKAGE} toolkit — is this an FYT unit?")
+            return
+        }
+        emitInfo("trying ${components.size} ${FytProtocol.HOST_PACKAGE} service component(s)")
+        for (component in components) {
+            if (tryBind(conn, Intent().setComponent(component), "component=${component.shortClassName}")) return
+        }
+        emitInfo("bound to none of ${FytProtocol.HOST_PACKAGE}'s services — the toolkit may not be exported on this firmware")
+    }
+
+    /** One bind attempt; on success records [connection] and returns true. */
+    private fun tryBind(conn: ToolkitConnection, intent: Intent, label: String): Boolean {
+        try {
+            if (context.bindService(intent, conn, Context.BIND_AUTO_CREATE)) {
+                connection = conn
+                emitInfo("bindService OK with $label")
+                return true
+            }
+            emitInfo("bindService returned false for $label")
+        } catch (e: Exception) {
+            emitInfo("bindService threw for $label: $e")
+        }
+        // Even a failed bindService leaves the connection registered; release
+        // it before the next attempt.
+        runCatching { context.unbindService(conn) }
+        return false
+    }
+
+    /** Service components declared by the host package, for component-based binding. */
+    private fun hostServiceComponents(): List<ComponentName> = try {
+        val info = context.packageManager.getPackageInfo(FytProtocol.HOST_PACKAGE, PackageManager.GET_SERVICES)
+        info.services?.map { ComponentName(it.packageName, it.name) } ?: emptyList()
+    } catch (e: PackageManager.NameNotFoundException) {
+        emitInfo("${FytProtocol.HOST_PACKAGE} is NOT installed — this unit may not run the FYT toolkit")
+        emptyList()
+    } catch (e: Exception) {
+        emitInfo("could not query ${FytProtocol.HOST_PACKAGE} services: $e")
+        emptyList()
     }
 
     override fun stop(): Unit = synchronized(this) {

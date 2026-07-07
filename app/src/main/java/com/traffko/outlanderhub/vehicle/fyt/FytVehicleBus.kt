@@ -337,26 +337,22 @@ class FytVehicleBus(
                 }
             }
             emitInfo(
-                if (hits == 0) "no CAN/vehicle service matched — Export the log or use an OBD-II dongle"
+                if (hits == 0) "no CAN/vehicle service matched by keyword — running Topway platform probe"
                 else "found $hits candidate package(s) above",
             )
-            probeHostCandidate("com.tw.carchoose")
+            // This unit is a Topway TS-class unit, not FYT: its CAN path is the
+            // TWUtil serial mux, invisible to a service/keyword scan. Probe it,
+            // and deep-inspect any Topway vehicle package it confirms present.
+            runTopwayProbe()
             return
         }
 
         // Fallback: names only, to avoid TransactionTooLargeException on big lists.
-        val names = try {
-            pm.getInstalledPackages(0)
-        } catch (e: Exception) {
-            emitInfo("could not list installed packages: $e")
-            return
-        }
-        val candidates = names.map { it.packageName }
-            .filter { name -> CAN_KEYWORDS.any { name.contains(it, true) } }
-        emitInfo(
-            if (candidates.isEmpty()) "no CAN/vehicle package matched among ${names.size} packages — Export or use OBD-II"
-            else "candidate packages: ${candidates.joinToString()}",
-        )
+        runTopwayProbe()
+    }
+
+    private fun runTopwayProbe() {
+        TopwayProbe(context, ::emitInfo, ::probeHostCandidate).run()
     }
 
     /**

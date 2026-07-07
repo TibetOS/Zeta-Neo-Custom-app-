@@ -36,32 +36,45 @@ class TopwayProbe(
 
     fun run() {
         emit("── Topway platform probe ──")
-        probeTwUtilClass()
+        val twUtilClass = probeTwUtilClass()
         val installed = probeKnownPackages()
         scanAllPackages(installed)
         // Deep-inspect any confirmed vehicle package (services/providers +
         // binder descriptors) — its own AIDL is a second, bindable CAN path
         // besides TWUtil, and the descriptor tells us how to talk to it.
         installed.filter { it in VEHICLE_PACKAGES }.forEach(deepInspect)
+        // If the class resolved, go past "present" to "actually readable":
+        // stand up the serial pipeline and see whether the MCU is reachable.
+        if (twUtilClass != null) attemptLiveRead(twUtilClass)
     }
 
     /**
      * The decisive check: `android.tw.john.TWUtil` lives on the boot classpath
      * of Topway firmware, so it resolves by name even though no app declares
-     * it. If this loads, the CAN path is TWUtil (pull its methods next); if it
-     * doesn't, this isn't a Topway unit either and OBD-II is the fallback.
+     * it. Returns the loaded class if present (so a live read can follow), else
+     * null — in which case this isn't a Topway TWUtil unit and OBD-II is the
+     * fallback.
      */
-    private fun probeTwUtilClass() {
-        val found = try {
-            Class.forName(TWUTIL_CLASS, false, context.classLoader)
-            true
-        } catch (_: Throwable) {
-            false
-        }
+    private fun probeTwUtilClass(): Class<*>? {
+        val cls = TwUtilReader.resolveClass(context.classLoader)
         emit(
-            if (found) "FOUND framework class $TWUTIL_CLASS — Topway MCU serial surface is present"
-            else "$TWUTIL_CLASS NOT resolvable — not a Topway TWUtil unit"
+            if (cls != null) "FOUND framework class ${TwUtilReader.CLASS_NAME} — Topway MCU serial surface is present"
+            else "${TwUtilReader.CLASS_NAME} NOT resolvable — not a Topway TWUtil unit"
         )
+        return cls
+    }
+
+    /**
+     * Past class-presence: actually bring the serial link up, because "the
+     * class exists" and "the MCU answers" are different facts and finding out
+     * in-car once beats a second trip. [TwUtilReader] constructs TWUtil, opens
+     * the CANBUS channel and starts it under a hard timeout, always tearing the
+     * handle back down; an `open()==0` result is the strongest signal short of
+     * decoded frames that this unit's data is readable.
+     */
+    private fun attemptLiveRead(twUtilClass: Class<*>) {
+        emit("attempting TWUtil live read on CANBUS channel ${TwUtilReader.CANBUS_CHANNEL} …")
+        emit(TwUtilReader.attemptLiveRead(twUtilClass))
     }
 
     /**
@@ -119,8 +132,6 @@ class TopwayProbe(
     }
 
     private companion object {
-        const val TWUTIL_CLASS = "android.tw.john.TWUtil"
-
         /**
          * Known Topway system/vehicle packages to resolve by exact name. Media
          * ones (music/radio/…) are confirmed from decompiled TS18 APKs; the

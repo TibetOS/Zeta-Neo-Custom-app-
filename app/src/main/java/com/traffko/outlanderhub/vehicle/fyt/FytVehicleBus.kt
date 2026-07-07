@@ -11,6 +11,7 @@ import android.util.Log
 import com.syu.ipc.IModuleCallback
 import com.syu.ipc.IRemoteModule
 import com.syu.ipc.IRemoteToolkit
+import com.syu.ipc.ModuleObject
 import com.traffko.outlanderhub.vehicle.BusEvent
 import com.traffko.outlanderhub.vehicle.VehicleBus
 import com.traffko.outlanderhub.vehicle.VehicleSource
@@ -30,6 +31,11 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 private const val TAG = "FytVehicleBus"
+
+// null arrays and empty arrays are different facts when probing an
+// undocumented service — print exactly what came back.
+private fun ModuleObject.pretty(): String =
+    "ints=${ints?.contentToString()} flts=${flts?.contentToString()} strs=${strs?.contentToString()}"
 
 /**
  * Live vehicle data from the Zeta Neo's FYT platform: binds the proprietary
@@ -257,6 +263,40 @@ class FytVehicleBus(
         } catch (e: Exception) {
             emitInfo("cmd($code) failed: $e")
             false
+        }
+    }
+
+    /**
+     * Pull-mode read of one toolkit value (`IRemoteModule.get`) — the one-shot
+     * counterpart of the register() push subscription. Blocking binder call:
+     * keep off the main thread. Null when the module is unbound or the call
+     * fails.
+     */
+    fun readCode(code: Int): ModuleObject? {
+        val module = canModule ?: return null
+        return try {
+            module.get(code, null, null, null)
+        } catch (e: Exception) {
+            Log.w(TAG, "get($code) failed", e)
+            null
+        }
+    }
+
+    /**
+     * get()-probe the decoder's static config codes and report each result as
+     * an fyt-info line. These values are never pushed, so this is the only way
+     * they show up in the CAN tab. Binder round-trips — runs on the bus scope.
+     */
+    fun probeConfig() {
+        scope.launch {
+            if (canModule == null) {
+                emitInfo("config probe skipped — CAN module not bound")
+                return@launch
+            }
+            for ((code, name) in FytProtocol.CONFIG_PROBE_CODES) {
+                val result = readCode(code)
+                emitInfo("get($name=$code) → ${result?.pretty() ?: "null"}")
+            }
         }
     }
 

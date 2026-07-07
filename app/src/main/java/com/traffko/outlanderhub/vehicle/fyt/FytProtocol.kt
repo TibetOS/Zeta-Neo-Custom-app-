@@ -51,6 +51,18 @@ object FytProtocol {
      */
     const val CAN_SUBSCRIBE_FROM = 1000
     const val CAN_SUBSCRIBE_TO = 1200
+
+    /**
+     * Static decoder-config codes, read with pull-mode `IRemoteModule.get()`
+     * when the CAN tab opens: these describe the decoder itself (protocol id,
+     * door layout, version) and are never pushed through register(), so a
+     * one-shot get() is the only way to see them.
+     */
+    val CONFIG_PROBE_CODES: Map<Int, String> = mapOf(
+        1000 to "U_CANBUS_ID",
+        1004 to "U_EXIST_DOOR",
+        1005 to "U_CANBUS_VER",
+    )
 }
 
 /** The vehicle signals a CAN update code can be mapped to. */

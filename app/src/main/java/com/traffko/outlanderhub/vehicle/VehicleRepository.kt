@@ -92,6 +92,11 @@ class VehicleRepository(
     fun sendCommand(code: Int, ints: IntArray = intArrayOf()): Boolean =
         activeBus.sendCommand(code, ints)
 
+    /** One-shot get() probe of the FYT static config codes; no-op on other sources. */
+    fun probeFytConfig() {
+        if (activeBus === fytBus) fytBus.probeConfig()
+    }
+
     fun clearEventLog() {
         synchronized(logLock) {
             logBuffer.clear()

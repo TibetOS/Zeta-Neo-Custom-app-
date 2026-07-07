@@ -68,6 +68,11 @@ fun DiagnosticsScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
         if (log.events.isNotEmpty()) listState.scrollToItem(log.events.lastIndex)
     }
 
+    // Each open of this tab re-reads the decoder's static config via
+    // pull-mode get() — those codes never push, so without this probe they
+    // would never appear in the log.
+    LaunchedEffect(Unit) { viewModel.probeFytConfig() }
+
     Column(modifier, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("CAN bus", fontSize = 30.sp, fontWeight = FontWeight.Light, color = Hue.TextPrimary)

@@ -103,5 +103,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun sendCommand(code: Int, vararg ints: Int): Boolean =
         vehicles.sendCommand(code, ints)
 
+    fun probeFytConfig() = vehicles.probeFytConfig()
+
     fun clearEventLog() = vehicles.clearEventLog()
 }

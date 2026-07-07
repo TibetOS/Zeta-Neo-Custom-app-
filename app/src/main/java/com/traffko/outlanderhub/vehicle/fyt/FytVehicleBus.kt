@@ -287,8 +287,9 @@ class FytVehicleBus(
             }
             emitInfo(
                 if (hits == 0) "no CAN/vehicle service matched — Export the log or use an OBD-II dongle"
-                else "found $hits candidate package(s) above — share them so I can target the CAN one",
+                else "found $hits candidate package(s) above",
             )
+            probeHostCandidate("com.tw.carchoose")
             return
         }
 
@@ -305,6 +306,55 @@ class FytVehicleBus(
             if (candidates.isEmpty()) "no CAN/vehicle package matched among ${names.size} packages — Export or use OBD-II"
             else "candidate packages: ${candidates.joinToString()}",
         )
+    }
+
+    /**
+     * Deep-inspect a candidate CAN-host package: list its providers (with
+     * authorities), services and receivers, note vehicle-ish permissions, and
+     * try to bind each exported service — the bound Binder's interface
+     * descriptor names its AIDL, which tells us how to talk to it. Diagnostic.
+     */
+    private fun probeHostCandidate(pkg: String) {
+        val flags = PackageManager.GET_SERVICES or PackageManager.GET_RECEIVERS or
+            PackageManager.GET_PROVIDERS or PackageManager.GET_PERMISSIONS
+        val info = try {
+            context.packageManager.getPackageInfo(pkg, flags)
+        } catch (e: Exception) {
+            emitInfo("cannot inspect $pkg: ${e.javaClass.simpleName}")
+            return
+        }
+        emitInfo("── inspecting $pkg ──")
+        info.providers?.forEach {
+            emitInfo("provider ${it.name.substringAfterLast('.')} auth=${it.authority} exported=${it.exported}")
+        }
+        info.services?.forEach {
+            emitInfo("service ${it.name.substringAfterLast('.')} exported=${it.exported}")
+        }
+        info.receivers?.take(20)?.forEach {
+            emitInfo("receiver ${it.name.substringAfterLast('.')} exported=${it.exported}")
+        }
+        info.requestedPermissions
+            ?.filter { p -> listOf("can", "car", "mcu", "vehicle", "uart", "serial").any { p.contains(it, true) } }
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { emitInfo("perms: ${it.joinToString { p -> p.substringAfterLast('.') }}") }
+        info.services?.filter { it.exported }?.forEach { svc ->
+            val conn = object : ServiceConnection {
+                override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+                    val desc = runCatching { binder?.interfaceDescriptor }.getOrNull()
+                    emitInfo("bound ${svc.name.substringAfterLast('.')} → ${desc ?: "no descriptor"}")
+                }
+                override fun onServiceDisconnected(name: ComponentName?) {}
+            }
+            try {
+                val accepted = context.bindService(
+                    Intent().setComponent(ComponentName(pkg, svc.name)), conn, Context.BIND_AUTO_CREATE,
+                )
+                emitInfo("bind ${svc.name.substringAfterLast('.')}: ${if (accepted) "accepted" else "refused"}")
+                if (!accepted) runCatching { context.unbindService(conn) }
+            } catch (e: Exception) {
+                emitInfo("bind ${svc.name.substringAfterLast('.')} threw ${e.javaClass.simpleName}")
+            }
+        }
     }
 
     private companion object {

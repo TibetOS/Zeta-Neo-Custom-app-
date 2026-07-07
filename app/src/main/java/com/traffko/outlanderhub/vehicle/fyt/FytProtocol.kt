@@ -23,20 +23,34 @@ object FytProtocol {
         "com.syu.ms.service.ToolkitService",
     )
 
-    // Module codes passed to IRemoteToolkit.getRemoteModule(...)
+    /**
+     * Service that hosts the toolkit binder inside [HOST_PACKAGE]. Binding by
+     * action alone is unreliable on FYT firmwares; the reference client binds
+     * this explicit component (see docs/CAN-INTEGRATION.md).
+     */
+    const val TOOLKIT_COMPONENT = "app.ToolkitService"
+
+    // Module codes passed to IRemoteToolkit.getRemoteModule(...). Verified
+    // against the decompiled com.syu.ms toolkit (see docs/CAN-INTEGRATION.md).
     const val MODULE_MAIN = 0
-    const val MODULE_SOUND = 1
-    const val MODULE_RADIO = 2
-    const val MODULE_CANBUS = 6
+    const val MODULE_RADIO = 1
+    const val MODULE_BT = 2
+    const val MODULE_DVD = 3
+    const val MODULE_SOUND = 4
+    const val MODULE_TV = 6
+    const val MODULE_CANBUS = 7
+    const val MODULE_TPMS = 8
+    const val MODULE_OBD = 12
 
     /**
-     * CAN update codes vary per vehicle/decoder protocol. Rather than
-     * hardcoding a possibly-wrong Outlander map up front, we subscribe to a
-     * broad code range and let the Diagnostics screen show which codes fire.
-     * Once identified on the real unit, map them in [FytSignalMap].
+     * CAN update codes on the syu toolkit live in the 1000+ range (0..255 was
+     * the wrong ID space). We subscribe across the observed band and let the
+     * Diagnostics screen show which codes fire; identified ones are mapped in
+     * [FytSignalMap]. Reference IDs: U_CANBUS_ID=1000, U_CUR_SPEED=1031,
+     * U_ENGINE_SPEED=1032, U_CANBUS_FRAME_TO_UI=1019.
      */
-    const val CAN_SUBSCRIBE_FROM = 0
-    const val CAN_SUBSCRIBE_TO = 255
+    const val CAN_SUBSCRIBE_FROM = 1000
+    const val CAN_SUBSCRIBE_TO = 1200
 }
 
 /** The vehicle signals a CAN update code can be mapped to. */
@@ -60,29 +74,18 @@ enum class SignalKind(val label: String) {
  * Default mapping of CAN-module update codes to vehicle signals for the
  * Mitsubishi Outlander (2019) decoder shipped with the Zeta Neo 14.
  *
- * These defaults follow the most common FYT "Raise/Hiworld Mitsubishi"
- * decoder layout but MUST be validated on the actual car. They no longer
- * need a rebuild to correct: tap an event in the CAN tab and assign the
- * code to a signal — the live mapping is DataStore-backed (see
- * [SignalMapRepository]) and these values only seed it.
+ * Only the two update codes confirmed against the decompiled syu toolkit are
+ * seeded here (U_CUR_SPEED=1031, U_ENGINE_SPEED=1032). Body signals
+ * (doors/climate/fuel/…) use decoder-specific codes in the same 1000+ band
+ * that are not yet observed on this car — identify them on the real unit and
+ * assign live: tap an event in the CAN tab and pick its signal. The mapping is
+ * DataStore-backed (see [SignalMapRepository]) and survives restarts; these
+ * values only seed it.
  */
 object FytSignalMap {
     val DEFAULTS: Map<Int, SignalKind> = mapOf(
-        16 to SignalKind.DOORS,
-        17 to SignalKind.OUTSIDE_TEMP,
-        32 to SignalKind.SPEED,
-        33 to SignalKind.RPM,
-        34 to SignalKind.BATTERY_VOLTS,
-        35 to SignalKind.COOLANT_TEMP,
-        36 to SignalKind.FUEL,
-        37 to SignalKind.ODOMETER,
-        38 to SignalKind.HANDBRAKE,
-        39 to SignalKind.SEATBELT,
-        // GEAR at 40 is a guess — no observed code yet; placed after the
-        // drive block so the Dash PRND strip has a chance of lighting up.
-        40 to SignalKind.GEAR,
-        48 to SignalKind.CLIMATE,
-        64 to SignalKind.TPMS,
+        1031 to SignalKind.SPEED,
+        1032 to SignalKind.RPM,
     )
 
     /** Serializes a mapping for DataStore, e.g. `"16:DOORS,32:SPEED"`. */

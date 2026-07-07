@@ -156,7 +156,18 @@ class FytVehicleBus(
         if (connection != null) return
         val conn = ToolkitConnection()
 
-        // Known intent actions first — the fast path on recognised firmwares.
+        // Explicit component is the reference client's bind path and the most
+        // reliable — action-only binds are flaky on FYT firmwares.
+        val toolkitComponent = ComponentName(FytProtocol.HOST_PACKAGE, FytProtocol.TOOLKIT_COMPONENT)
+        if (tryBind(
+                conn,
+                Intent(FytProtocol.SERVICE_ACTIONS.first()).setComponent(toolkitComponent),
+                "component=${FytProtocol.HOST_PACKAGE}/${FytProtocol.TOOLKIT_COMPONENT}",
+            )
+        ) return
+
+        // Known intent actions next — fallback for firmwares that name the
+        // service differently but still respond to the action.
         for (action in FytProtocol.SERVICE_ACTIONS) {
             if (tryBind(conn, Intent(action).setPackage(FytProtocol.HOST_PACKAGE), "action=$action")) return
         }

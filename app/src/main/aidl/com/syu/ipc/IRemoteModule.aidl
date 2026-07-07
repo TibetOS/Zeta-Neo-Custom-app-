@@ -1,6 +1,7 @@
 package com.syu.ipc;
 
 import com.syu.ipc.IModuleCallback;
+import com.syu.ipc.ModuleObject;
 
 /**
  * One functional module (canbus, main MCU, sound, ...) of the FYT toolkit
@@ -13,6 +14,7 @@ import com.syu.ipc.IModuleCallback;
  */
 interface IRemoteModule {
     void cmd(int cmdCode, in int[] ints, in float[] flts, in String[] strs);
+    ModuleObject get(int getCode, in int[] ints, in float[] flts, in String[] strs);
     void register(IModuleCallback callback, int updateCode, int flag);
     void unregister(IModuleCallback callback, int updateCode);
 }

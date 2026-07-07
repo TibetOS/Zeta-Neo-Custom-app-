@@ -18,10 +18,18 @@ import org.junit.Test
 class FytSignalDecoderTest {
 
     private val base = VehicleState(source = VehicleSource.FYT_CAN)
-    private val defaults = FytSignalMap.DEFAULTS
+
+    // DEFAULTS seeds only the two codes confirmed against the real toolkit
+    // (speed, rpm). Payload decoding must already hold for kinds the in-car
+    // mapping will assign later, so those get synthetic codes here.
+    private val signalMap = FytSignalMap.DEFAULTS + mapOf(
+        2001 to SignalKind.BATTERY_VOLTS,
+        2002 to SignalKind.GEAR,
+        2003 to SignalKind.TPMS,
+    )
 
     private fun codeOf(kind: SignalKind): Int =
-        defaults.entries.first { it.value == kind }.key
+        signalMap.entries.first { it.value == kind }.key
 
     private fun event(
         code: Int,
@@ -32,32 +40,32 @@ class FytSignalDecoderTest {
 
     @Test
     fun `any event marks the bus connected`() {
-        val out = FytSignalDecoder.apply(base, event(code = 9999), defaults)
+        val out = FytSignalDecoder.apply(base, event(code = 9999), signalMap)
         assertTrue(out.connected)
         assertEquals(base, out.copy(connected = false))
     }
 
     @Test
     fun `speed prefers float payload over int`() {
-        val out = FytSignalDecoder.apply(base, event(codeOf(SignalKind.SPEED), ints = listOf(88), floats = listOf(64.5f)), defaults)
+        val out = FytSignalDecoder.apply(base, event(codeOf(SignalKind.SPEED), ints = listOf(88), floats = listOf(64.5f)), signalMap)
         assertEquals(64.5f, out.speedKmh)
     }
 
     @Test
     fun `speed falls back to int payload`() {
-        val out = FytSignalDecoder.apply(base, event(codeOf(SignalKind.SPEED), ints = listOf(88)), defaults)
+        val out = FytSignalDecoder.apply(base, event(codeOf(SignalKind.SPEED), ints = listOf(88)), signalMap)
         assertEquals(88f, out.speedKmh)
     }
 
     @Test
     fun `battery int payload is tenths of a volt`() {
-        val out = FytSignalDecoder.apply(base, event(codeOf(SignalKind.BATTERY_VOLTS), ints = listOf(142)), defaults)
+        val out = FytSignalDecoder.apply(base, event(codeOf(SignalKind.BATTERY_VOLTS), ints = listOf(142)), signalMap)
         assertEquals(14.2f, out.batteryVolts)
     }
 
     @Test
     fun `empty payload leaves signal unknown`() {
-        val out = FytSignalDecoder.apply(base, event(codeOf(SignalKind.RPM)), defaults)
+        val out = FytSignalDecoder.apply(base, event(codeOf(SignalKind.RPM)), signalMap)
         assertNull(out.rpm)
     }
 
@@ -118,19 +126,19 @@ class FytSignalDecoderTest {
     @Test
     fun `undecodable gear payload keeps the previous gear`() {
         val driving = base.copy(gear = "D")
-        val out = FytSignalDecoder.apply(driving, event(codeOf(SignalKind.GEAR), ints = listOf(9)), defaults)
+        val out = FytSignalDecoder.apply(driving, event(codeOf(SignalKind.GEAR), ints = listOf(9)), signalMap)
         assertEquals("D", out.gear)
     }
 
     @Test
     fun `tpms fills four corners and pads missing ones with null`() {
-        val out = FytSignalDecoder.apply(base, event(codeOf(SignalKind.TPMS), floats = listOf(230f, 231f, 228f)), defaults)
+        val out = FytSignalDecoder.apply(base, event(codeOf(SignalKind.TPMS), floats = listOf(230f, 231f, 228f)), signalMap)
         assertEquals(listOf(230f, 231f, 228f, null), out.tirePressuresKpa)
     }
 
     @Test
     fun `tpms falls back to int payload`() {
-        val out = FytSignalDecoder.apply(base, event(codeOf(SignalKind.TPMS), ints = listOf(230, 231, 228, 229)), defaults)
+        val out = FytSignalDecoder.apply(base, event(codeOf(SignalKind.TPMS), ints = listOf(230, 231, 228, 229)), signalMap)
         assertEquals(listOf(230f, 231f, 228f, 229f), out.tirePressuresKpa)
     }
 }

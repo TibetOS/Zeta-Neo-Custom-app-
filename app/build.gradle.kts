@@ -7,7 +7,7 @@ plugins {
 // Set by the release workflow from the git tag / run number; local builds
 // fall back to a dev version.
 val appVersionName = providers.environmentVariable("APP_VERSION_NAME").orNull
-    ?.removePrefix("v") ?: "0.3.0-safe"
+    ?.removePrefix("v") ?: "0.4.0-tw"
 val appVersionCode = providers.environmentVariable("APP_VERSION_CODE").orNull
     ?.toIntOrNull() ?: 1
 

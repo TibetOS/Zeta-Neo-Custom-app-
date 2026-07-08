@@ -119,13 +119,11 @@ class TopwayVehicleBus(
                 .onFailure { emitInfo("dropped MCU msg what=${msg.what}: ${it.javaClass.simpleName}") }
             true
         }
-        emitInfo("opening TWUtil channel ${TwUtilReader.CANBUS_CHANNEL} with a ${SWEEP_IDS.size}-id discovery sweep …")
-        var link = openWithTimeout(cls, SWEEP_IDS, receiver)
-        if (link == null) {
-            emitInfo("sweep open failed — retrying with the ${CORE_IDS.size} reference ids")
-            link = openWithTimeout(cls, CORE_IDS, receiver)
-        }
-        val opened = link
+        // Dump the API surface first (reflection only, cannot crash) so the
+        // exact firmware signature is always in the log, then open for real.
+        TwUtilInspector.dump(cls).forEach(::emitInfo)
+        emitInfo("opening TWUtil with the ${OPEN_IDS.size}-id curated subscription set …")
+        val opened = openWithTimeout(cls, OPEN_IDS, receiver)
         val accepted = synchronized(this) {
             when {
                 opened == null -> false
@@ -218,11 +216,12 @@ class TopwayVehicleBus(
     }
 
     private companion object {
-        // While true, the bus only dumps TWUtil's API surface and never invokes
-        // a vendor method — invoking open()/the (int) ctor aborts the process
-        // natively on this unit. Flip to false once the dumped signature tells
-        // us the safe call shape.
-        const val SAFE_MODE = true
+        // Belt-and-suspenders: when true the bus only dumps TWUtil's API surface
+        // and invokes nothing. Now false — the GitHub client survey gave us the
+        // safe call shape (no-arg ctor + a small curated id set + open(ids, 0)),
+        // so we open for real. The CrashReporter latch still guards against a
+        // loop if this unit's firmware differs. Flip back to true to re-inspect.
+        const val SAFE_MODE = false
 
         const val OPEN_TIMEOUT_MS = 5000L
 
@@ -232,15 +231,22 @@ class TopwayVehicleBus(
         const val CAN_STATUS_ID = 0x0501
         const val STATUS_POLL = 255
 
-        // Discovery sweep: every message id observed in community TWUtil
-        // clients (KaierUtils, d51x/TWUtil, com.tw.bt, Orbit) lives in these
-        // pages — the low context table (keys 513, sleep 514, volume 515,
-        // audio focus 769, radio 1025-1030, CAN 0x0501), the app-launch page
-        // (33281), the mode/shutdown/reverse pages (40448-40732), and the
-        // device-id/power page (65289, 65521).
-        val SWEEP_IDS: ShortArray =
-            listOf(0x0000..0x0FFF, 0x8200..0x82FF, 0x9E00..0x9FFF, 0xFF00..0xFFFF)
-                .flatMap { it }.map { it.toShort() }.toShortArray()
-        val CORE_IDS = shortArrayOf(0x0501, 513, 514, 515, 517, 769)
+        // Curated subscription set. THE 5120-id sweep we opened with before was
+        // the native SIGABRT: every working GitHub client (bphillips09/Orbit,
+        // asb72/dvd-bt, d51x/KaierUtils) opens with a handful of ids — the
+        // native layer copies them into a fixed-size table and a huge array
+        // overflows it. This is KaierUtils' proven `twutil_contexts` set plus
+        // the CAN/vehicle id (0x0501) and AUX status (517) we actually want.
+        val OPEN_IDS = shortArrayOf(
+            0x0501,           // CAN / vehicle (factory monitor's GET 0501)
+            513,              // key press
+            514,              // sleep/wake
+            515,              // volume
+            517,              // AUX status
+            769,              // audio focus
+            33281.toShort(),  // app launch
+            40720.toShort(),  // shutdown
+            40732.toShort(),  // reverse activity
+        )
     }
 }

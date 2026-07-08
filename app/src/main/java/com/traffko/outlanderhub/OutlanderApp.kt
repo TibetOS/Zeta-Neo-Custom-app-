@@ -6,6 +6,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.traffko.outlanderhub.apps.InstalledAppsRepository
+import com.traffko.outlanderhub.diag.CrashReporter
 import com.traffko.outlanderhub.overlay.OverlayService
 import com.traffko.outlanderhub.settings.SettingsRepository
 import com.traffko.outlanderhub.vehicle.VehicleRepository
@@ -38,8 +39,12 @@ class OutlanderApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        CrashReporter.install(this)
         signalMapRepository = SignalMapRepository(this)
         vehicleRepository = VehicleRepository(this, signalMapRepository.map)
+        CrashReporter.consume(this)?.let {
+            vehicleRepository.postDiagnostic("crash", "last crash before restart:\n$it")
+        }
         tripRepository = TripRepository(this, vehicleRepository.state)
         settingsRepository = SettingsRepository(this)
         installedAppsRepository = InstalledAppsRepository(this)

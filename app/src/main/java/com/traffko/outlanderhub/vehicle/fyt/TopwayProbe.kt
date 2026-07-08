@@ -43,9 +43,12 @@ class TopwayProbe(
         // binder descriptors) — its own AIDL is a second, bindable CAN path
         // besides TWUtil, and the descriptor tells us how to talk to it.
         installed.filter { it in VEHICLE_PACKAGES }.forEach(deepInspect)
-        // If the class resolved, go past "present" to "actually readable":
-        // stand up the serial pipeline and see whether the MCU is reachable.
-        if (twUtilClass != null) attemptLiveRead(twUtilClass)
+        // If the class resolved, dump its exact API surface (constructors,
+        // methods, fields) from reflection metadata. This is deliberately NOT a
+        // live read: invoking open()/the (int) constructor on this unit aborts
+        // the process natively (uncatchable), so we only read signatures — which
+        // is also precisely the decompile we need to call TWUtil correctly.
+        if (twUtilClass != null) dumpTwUtilSurface(twUtilClass)
     }
 
     /**
@@ -65,16 +68,17 @@ class TopwayProbe(
     }
 
     /**
-     * Past class-presence: actually bring the serial link up, because "the
-     * class exists" and "the MCU answers" are different facts and finding out
-     * in-car once beats a second trip. [TwUtilReader] constructs TWUtil, opens
-     * the CANBUS channel and starts it under a hard timeout, always tearing the
-     * handle back down; an `open()==0` result is the strongest signal short of
-     * decoded frames that this unit's data is readable.
+     * Dump TWUtil's exact API surface from reflection metadata — no method is
+     * invoked, so this cannot trigger the native abort a live open() does. The
+     * signatures (which constructors exist, what open()/write() really take, the
+     * nested TWObject fields) are what we were missing when we guessed the call
+     * shape from a Fernflower decompile; reading them off the real firmware is
+     * the on-device equivalent of decompiling framework.jar.
      */
-    private fun attemptLiveRead(twUtilClass: Class<*>) {
-        emit("attempting TWUtil live read on CANBUS channel ${TwUtilReader.CANBUS_CHANNEL} …")
-        emit(TwUtilReader.attemptLiveRead(twUtilClass))
+    private fun dumpTwUtilSurface(twUtilClass: Class<*>) {
+        emit("── TWUtil API surface (reflection dump, nothing invoked) ──")
+        TwUtilInspector.dump(twUtilClass).forEach(emit)
+        emit("── end TWUtil surface ──")
     }
 
     /**

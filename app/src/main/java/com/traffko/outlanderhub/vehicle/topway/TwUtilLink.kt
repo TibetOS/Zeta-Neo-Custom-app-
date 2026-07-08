@@ -95,12 +95,18 @@ class TwUtilLink private constructor(
             receiver: Any,
             info: (String) -> Unit,
         ): TwUtilLink? {
+            // These breadcrumbs are load-bearing: a native SIGABRT in the vendor
+            // library takes the process down with no JVM exception, so the last
+            // breadcrumb in the exported log is the only evidence of which step
+            // aborted. Emit one before every vendor call.
+            info("step: constructing ${cls.simpleName}")
             val instance = construct(cls, channel)
             if (instance == null) {
                 info("TWUtil has no usable constructor")
                 return null
             }
             try {
+                info("step: open(${ids.size} ids, $baud)")
                 val rc = invokeOpen(instance, ids, baud)
                 if (rc == null) {
                     info("TWUtil has no open(short[]) surface — ${dumpMethods(cls)}")
@@ -112,7 +118,9 @@ class TwUtilLink private constructor(
                 }
                 // open → start → addHandler is the order every reference client
                 // uses (KaierUtils, d51x/TWUtil, com.tw.bt) — keep it.
+                info("step: start")
                 instance.javaClass.getMethod("start").invoke(instance)
+                info("step: attach receiver")
                 val attached = attach(instance, receiver)
                 if (attached == null) {
                     info("no handler-attach method found — ${dumpMethods(cls)}")
@@ -127,9 +135,14 @@ class TwUtilLink private constructor(
             }
         }
 
+        // Every working reference client (KaierUtils, d51x/TWUtil, com.tw.bt)
+        // constructs no-arg; the (int) ctor takes a vendor *mode id*, not a CAN
+        // channel, and feeding it an invented index can SIGABRT in native code
+        // — a crash no JVM try/catch can catch. Prefer no-arg; only fall back to
+        // the (int) ctor, and only with mode 0, if no-arg is truly absent.
         private fun construct(cls: Class<*>, channel: Int): Any? {
-            runCatching { return cls.getConstructor(Int::class.javaPrimitiveType).newInstance(channel) }
             runCatching { return cls.getConstructor().newInstance() }
+            runCatching { return cls.getConstructor(Int::class.javaPrimitiveType).newInstance(0) }
             return null
         }
 

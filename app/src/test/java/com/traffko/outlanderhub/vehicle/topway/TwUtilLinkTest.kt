@@ -17,8 +17,9 @@ class TwUtilLinkTest {
 
     class Receiver
 
-    class LiveTw(channel: Int) {
-        init { constructed += channel }
+    class LiveTw {
+        constructor() { constructed += 0 }
+        constructor(mode: Int) { constructed += mode }
         fun open(ids: ShortArray, baud: Int): Int { calls += "open(${ids.size},$baud)"; return 0 }
         fun addHandler(tag: String, h: Receiver) { calls += "addHandler($tag)" }
         fun removeHandler(tag: String) { calls += "removeHandler($tag)" }
@@ -82,7 +83,8 @@ class TwUtilLinkTest {
     fun `live session opens in order construct-open-start-attach`() {
         val link = openLive()
         assertNotNull(info.joinToString(), link)
-        assertEquals(listOf(7), LiveTw.constructed)
+        // No-arg constructor is preferred over the (int) mode ctor.
+        assertEquals(listOf(0), LiveTw.constructed)
         assertEquals(listOf("open(3,115200)", "start", "addHandler(${TwUtilLink.HANDLER_TAG})"), LiveTw.calls)
         assertTrue(info.joinToString(), info.any { it.contains("started") })
     }

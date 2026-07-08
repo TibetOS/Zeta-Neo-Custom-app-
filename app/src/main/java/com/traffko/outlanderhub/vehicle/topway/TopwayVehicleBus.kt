@@ -3,12 +3,14 @@ package com.traffko.outlanderhub.vehicle.topway
 import android.content.Context
 import android.os.Handler
 import android.os.HandlerThread
+import com.traffko.outlanderhub.diag.CrashReporter
 import com.traffko.outlanderhub.vehicle.BusEvent
 import com.traffko.outlanderhub.vehicle.VehicleBus
 import com.traffko.outlanderhub.vehicle.VehicleSource
 import com.traffko.outlanderhub.vehicle.VehicleState
 import com.traffko.outlanderhub.vehicle.fyt.FytSignalDecoder
 import com.traffko.outlanderhub.vehicle.fyt.SignalKind
+import com.traffko.outlanderhub.vehicle.fyt.TwUtilInspector
 import com.traffko.outlanderhub.vehicle.fyt.TwUtilReader
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -58,16 +60,38 @@ class TopwayVehicleBus(
 
     override fun start(): Unit = synchronized(this) {
         if (session != null || opening) return
+        // Crash-loop guard: if a previous bring-up armed the latch and never
+        // reached LIVE, it aborted the process (very likely a native SIGABRT in
+        // the vendor library). Refuse to auto-retry — that would loop the crash
+        // on every launch — and tell the user to pick another source. A manual
+        // re-select clears the latch via [rearm] so they can force one attempt.
+        if (CrashReporter.isArmed()) {
+            emitInfo(
+                "Topway MCU bring-up crashed the app last time before it went live. " +
+                    "Auto-start is disabled to stop the crash loop — the MCU serial link " +
+                    "aborts natively on this unit. Switch to Demo, or re-select Topway MCU " +
+                    "to force one more attempt (it will be captured)."
+            )
+            return
+        }
         val gen = ++generation
         opening = true
+        CrashReporter.arm()
         scope.launch {
             try {
                 establish(gen)
             } finally {
+                // establish() returned — the process survived this bring-up, so
+                // the latch has done its job. (A native abort never reaches here,
+                // which is exactly why the latch stays set and blocks next time.)
+                CrashReporter.disarm()
                 synchronized(this@TopwayVehicleBus) { opening = false }
             }
         }
     }
+
+    /** Clear the crash-loop latch so a deliberate user re-select gets one attempt. */
+    fun rearm() = CrashReporter.disarm()
 
     private suspend fun establish(gen: Int) {
         val cls = TwUtilReader.resolveClass(context.classLoader)
@@ -75,9 +99,24 @@ class TopwayVehicleBus(
             emitInfo("${TwUtilReader.CLASS_NAME} not on this device — the Topway source only works on the real unit")
             return
         }
+        if (SAFE_MODE) {
+            // Until the real TWUtil signature is confirmed, do NOT invoke any
+            // vendor method: open()/the (int) ctor abort the process natively on
+            // this unit. Dump the API surface (reflection only) so we can read
+            // the exact call shape off the firmware, then stop cleanly.
+            emitInfo("Topway SAFE MODE: dumping TWUtil API surface instead of opening the serial link (open() aborts natively here).")
+            TwUtilInspector.dump(cls).forEach(::emitInfo)
+            emitInfo("── end TWUtil surface — share this so the open()/write() call shape can be fixed ──")
+            CrashReporter.disarm()
+            CrashReporter.breadcrumb("")
+            return
+        }
         val thread = HandlerThread("tw-can").apply { start() }
         val receiver = Handler(thread.looper) { msg ->
-            onMcuMessage(msg.what, msg.arg1, msg.arg2, msg.obj)
+            // Runs on the HandlerThread; an uncaught throw here (vendor msg.obj
+            // types are unknown) would take the whole process down, so contain it.
+            runCatching { onMcuMessage(msg.what, msg.arg1, msg.arg2, msg.obj) }
+                .onFailure { emitInfo("dropped MCU msg what=${msg.what}: ${it.javaClass.simpleName}") }
             true
         }
         emitInfo("opening TWUtil channel ${TwUtilReader.CANBUS_CHANNEL} with a ${SWEEP_IDS.size}-id discovery sweep …")
@@ -105,6 +144,10 @@ class TopwayVehicleBus(
             thread.quitSafely()
             return
         }
+        // Past every vendor call without aborting — clear the crash-loop latch
+        // and breadcrumb so neither masquerades as a crash on the next launch.
+        CrashReporter.disarm()
+        CrashReporter.breadcrumb("")
         _state.update { it.copy(connected = true) }
         emitInfo("TWUtil session LIVE — MCU messages appear as tw-can events; drive/press buttons and map what changes")
         val rc = opened?.write(CAN_STATUS_ID, intArrayOf(STATUS_POLL))
@@ -160,6 +203,10 @@ class TopwayVehicleBus(
     }
 
     private fun emitInfo(message: String) {
+        // A native SIGABRT in TWUtil can kill the process before this async
+        // event reaches the log, so persist the bring-up steps synchronously —
+        // that file is what surfaces the crashing step on the next launch.
+        if (message.startsWith("step: ")) CrashReporter.breadcrumb(message.removePrefix("step: "))
         _events.tryEmit(
             BusEvent(
                 timestampMs = System.currentTimeMillis(),
@@ -171,6 +218,12 @@ class TopwayVehicleBus(
     }
 
     private companion object {
+        // While true, the bus only dumps TWUtil's API surface and never invokes
+        // a vendor method — invoking open()/the (int) ctor aborts the process
+        // natively on this unit. Flip to false once the dumped signature tells
+        // us the safe call shape.
+        const val SAFE_MODE = true
+
         const val OPEN_TIMEOUT_MS = 5000L
 
         // "Send me current state" idiom shared by every reference client

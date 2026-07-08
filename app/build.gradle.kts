@@ -7,7 +7,7 @@ plugins {
 // Set by the release workflow from the git tag / run number; local builds
 // fall back to a dev version.
 val appVersionName = providers.environmentVariable("APP_VERSION_NAME").orNull
-    ?.removePrefix("v") ?: "0.1.0-dev"
+    ?.removePrefix("v") ?: "0.3.0-safe"
 val appVersionCode = providers.environmentVariable("APP_VERSION_CODE").orNull
     ?.toIntOrNull() ?: 1
 
@@ -85,6 +85,7 @@ android {
     buildFeatures {
         compose = true
         aidl = true
+        buildConfig = true
     }
 }
 

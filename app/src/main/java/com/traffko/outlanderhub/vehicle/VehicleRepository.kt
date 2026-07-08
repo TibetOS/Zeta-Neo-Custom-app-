@@ -100,10 +100,32 @@ class VehicleRepository(
         if (activeBus === fytBus) fytBus.probeConfig()
     }
 
+    /**
+     * Clear the Topway crash-loop latch so a deliberate user re-select gets one
+     * bring-up attempt. Must be called only from an explicit user action, never
+     * the persisted-source replay, or the crash-loop guard is defeated.
+     */
+    fun rearmTopway() = topwayBus.rearm()
+
     fun clearEventLog() {
         synchronized(logLock) {
             logBuffer.clear()
             logGeneration++
+        }
+        publishLog()
+    }
+
+    /** Surface an out-of-band diagnostic (e.g. a captured crash) in the CAN log. */
+    fun postDiagnostic(channel: String, message: String) {
+        message.lineSequence().forEach { line ->
+            appendToLog(
+                BusEvent(
+                    timestampMs = System.currentTimeMillis(),
+                    channel = channel,
+                    code = -1,
+                    strings = listOf(line),
+                )
+            )
         }
         publishLog()
     }

@@ -41,6 +41,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.traffko.outlanderhub.BuildConfig
 import com.traffko.outlanderhub.MainViewModel
 import com.traffko.outlanderhub.UpdateStatus
 import com.traffko.outlanderhub.ui.components.MicroLabel
@@ -58,6 +59,12 @@ fun SettingsScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         Text("Setup", fontSize = 30.sp, fontWeight = FontWeight.Light, color = Hue.TextPrimary)
+        Text(
+            "v${BuildConfig.VERSION_NAME}",
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color = Hue.TextSecondary,
+        )
 
         Column(
             Modifier

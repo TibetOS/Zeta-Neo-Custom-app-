@@ -62,6 +62,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setSource(source: VehicleSource) {
+        // Explicit user selection — unlike the persisted-source replay in init,
+        // this is allowed to clear the Topway crash-loop latch for one attempt.
+        if (source == VehicleSource.TOPWAY_TW) vehicles.rearmTopway()
         viewModelScope.launch { settingsRepo.setSource(source) }
     }
 

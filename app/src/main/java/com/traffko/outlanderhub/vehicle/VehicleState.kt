@@ -1,6 +1,6 @@
 package com.traffko.outlanderhub.vehicle
 
-enum class VehicleSource { DEMO, FYT_CAN }
+enum class VehicleSource { DEMO, FYT_CAN, TOPWAY_TW }
 
 data class DoorState(
     val frontLeft: Boolean = false,

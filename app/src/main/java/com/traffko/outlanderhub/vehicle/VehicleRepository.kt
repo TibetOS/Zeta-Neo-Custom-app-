@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.SystemClock
 import com.traffko.outlanderhub.vehicle.fyt.FytVehicleBus
 import com.traffko.outlanderhub.vehicle.fyt.SignalKind
+import com.traffko.outlanderhub.vehicle.topway.TopwayVehicleBus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -34,6 +35,7 @@ class VehicleRepository(
 
     private val demoBus = DemoVehicleBus()
     private val fytBus = FytVehicleBus(context, signalMap)
+    private val topwayBus = TopwayVehicleBus(context, signalMap)
 
     private var activeBus: VehicleBus = demoBus
     private var pumpJobs = mutableListOf<Job>()
@@ -69,6 +71,7 @@ class VehicleRepository(
         activeBus = when (source) {
             VehicleSource.DEMO -> demoBus
             VehicleSource.FYT_CAN -> fytBus
+            VehicleSource.TOPWAY_TW -> topwayBus
         }
         _activeSource.value = source
         activeBus.start()

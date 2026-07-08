@@ -79,6 +79,13 @@ fun SettingsScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                     "Experimental — verify signals in the CAN screen.",
                 selected = settings.source == VehicleSource.FYT_CAN,
             ) { viewModel.setSource(VehicleSource.FYT_CAN) }
+            Spacer(Modifier.height(10.dp))
+            SourceOption(
+                title = "Topway MCU (TWUtil)",
+                subtitle = "Raw capture from this unit's MCU serial link. " +
+                    "Discovery mode — map the codes that change in the CAN screen.",
+                selected = settings.source == VehicleSource.TOPWAY_TW,
+            ) { viewModel.setSource(VehicleSource.TOPWAY_TW) }
         }
 
         Row(

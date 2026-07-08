@@ -147,16 +147,7 @@ class TopwayVehicleBus(
     private fun onMcuMessage(what: Int, arg1: Int, arg2: Int, obj: Any?) {
         val ints = mutableListOf(arg1, arg2)
         val strings = mutableListOf<String>()
-        when (obj) {
-            null -> Unit
-            is ByteArray -> {
-                ints += obj.map { it.toInt() and 0xFF }
-                strings += obj.joinToString(" ") { "%02x".format(it) }
-            }
-            is IntArray -> ints += obj.toList()
-            is String -> strings += obj
-            else -> strings += obj.toString()
-        }
+        TwUtilLink.decodePayload(obj, ints, strings)
         val event = BusEvent(
             timestampMs = System.currentTimeMillis(),
             channel = "tw-can",

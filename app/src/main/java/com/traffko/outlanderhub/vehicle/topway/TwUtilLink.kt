@@ -54,6 +54,35 @@ class TwUtilLink private constructor(
         const val HANDLER_TAG = "outlanderhub"
 
         /**
+         * Flatten a received msg.obj into event payload lists. The firmware
+         * class delivers text as String, binary as byte[]/short[]/int[], and —
+         * when one message carries two payloads — a TWUtil.TWObject pairing
+         * obj3+obj4 (Fernflower decompile in research/topway-ts18/community/),
+         * matched by name and unpacked via its public fields.
+         */
+        fun decodePayload(obj: Any?, ints: MutableList<Int>, strings: MutableList<String>) {
+            when (obj) {
+                null -> Unit
+                is ByteArray -> {
+                    ints += obj.map { it.toInt() and 0xFF }
+                    strings += obj.joinToString(" ") { "%02x".format(it) }
+                }
+                is ShortArray -> ints += obj.map { it.toInt() }
+                is IntArray -> ints += obj.toList()
+                is String -> strings += obj
+                else ->
+                    if (obj.javaClass.simpleName == "TWObject") {
+                        for (field in listOf("obj3", "obj4")) {
+                            runCatching { obj.javaClass.getField(field).get(obj) }.getOrNull()
+                                ?.let { decodePayload(it, ints, strings) }
+                        }
+                    } else {
+                        strings += obj.toString()
+                    }
+            }
+        }
+
+        /**
          * Stand a full session up; every step and failure is narrated through
          * [info]. Null means no session — the instance is always torn back
          * down on the way out.

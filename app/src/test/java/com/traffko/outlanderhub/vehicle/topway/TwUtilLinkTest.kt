@@ -129,6 +129,28 @@ class TwUtilLinkTest {
         assertTrue("close() must run on failure", BusyTw.closed)
     }
 
+    class TWObject(@JvmField val obj3: Any?, @JvmField val obj4: Any?)
+
+    @Test
+    fun `payload decode unpacks TWObject and flattens byte arrays`() {
+        val ints = mutableListOf<Int>()
+        val strings = mutableListOf<String>()
+        TwUtilLink.decodePayload(TWObject("RDS Text", byteArrayOf(0x2e, 0x05, 0x01.toByte())), ints, strings)
+        assertEquals(listOf(0x2e, 0x05, 0x01), ints)
+        assertEquals(listOf("RDS Text", "2e 05 01"), strings)
+    }
+
+    @Test
+    fun `payload decode passes primitives and arrays through`() {
+        val ints = mutableListOf<Int>()
+        val strings = mutableListOf<String>()
+        TwUtilLink.decodePayload(shortArrayOf(513, -25088), ints, strings)
+        TwUtilLink.decodePayload("plain", ints, strings)
+        TwUtilLink.decodePayload(null, ints, strings)
+        assertEquals(listOf(513, -25088), ints)
+        assertEquals(listOf("plain"), strings)
+    }
+
     @Test
     fun `missing attach method dumps the class surface and tears down`() {
         NoAttachTw.closed = false

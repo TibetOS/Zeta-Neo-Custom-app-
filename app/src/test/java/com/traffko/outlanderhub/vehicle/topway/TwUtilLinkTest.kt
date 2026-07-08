@@ -79,11 +79,11 @@ class TwUtilLinkTest {
     }
 
     @Test
-    fun `live session opens in order construct-open-attach-start`() {
+    fun `live session opens in order construct-open-start-attach`() {
         val link = openLive()
         assertNotNull(info.joinToString(), link)
         assertEquals(listOf(7), LiveTw.constructed)
-        assertEquals(listOf("open(3,115200)", "addHandler(${TwUtilLink.HANDLER_TAG})", "start"), LiveTw.calls)
+        assertEquals(listOf("open(3,115200)", "start", "addHandler(${TwUtilLink.HANDLER_TAG})"), LiveTw.calls)
         assertTrue(info.joinToString(), info.any { it.contains("started") })
     }
 

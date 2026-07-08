@@ -107,6 +107,8 @@ class TopwayVehicleBus(
         }
         _state.update { it.copy(connected = true) }
         emitInfo("TWUtil session LIVE — MCU messages appear as tw-can events; drive/press buttons and map what changes")
+        val rc = opened?.write(CAN_STATUS_ID, intArrayOf(STATUS_POLL))
+        emitInfo("CAN status poll write($CAN_STATUS_ID, $STATUS_POLL) rc=${rc ?: "no overload"}")
     }
 
     private suspend fun openWithTimeout(cls: Class<*>, ids: ShortArray, receiver: Any): TwUtilLink? =
@@ -180,13 +182,21 @@ class TopwayVehicleBus(
     private companion object {
         const val OPEN_TIMEOUT_MS = 5000L
 
-        // Discovery sweep: every message id the decompiled reference apps use
-        // sits either in the low table (BT 513/769, AUX 517, the factory CAN
-        // monitor's 0x0501) or the 0x9E00 control page (BT/AUX writes
-        // 40448-40477) — subscribe both wholesale to see what the MCU offers.
-        val SWEEP_IDS = ShortArray(0x1000 + 0x100) { i ->
-            if (i < 0x1000) i.toShort() else (0x9E00 + (i - 0x1000)).toShort()
-        }
-        val CORE_IDS = shortArrayOf(0x0501, 513, 517, 769)
+        // "Send me current state" idiom shared by every reference client
+        // (volume 515/255, audio focus 769/255, Orbit's STATUS_POLL) — poking
+        // the CAN id with it is what the factory monitor's GET 0501 does.
+        const val CAN_STATUS_ID = 0x0501
+        const val STATUS_POLL = 255
+
+        // Discovery sweep: every message id observed in community TWUtil
+        // clients (KaierUtils, d51x/TWUtil, com.tw.bt, Orbit) lives in these
+        // pages — the low context table (keys 513, sleep 514, volume 515,
+        // audio focus 769, radio 1025-1030, CAN 0x0501), the app-launch page
+        // (33281), the mode/shutdown/reverse pages (40448-40732), and the
+        // device-id/power page (65289, 65521).
+        val SWEEP_IDS: ShortArray =
+            listOf(0x0000..0x0FFF, 0x8200..0x82FF, 0x9E00..0x9FFF, 0xFF00..0xFFFF)
+                .flatMap { it }.map { it.toShort() }.toShortArray()
+        val CORE_IDS = shortArrayOf(0x0501, 513, 514, 515, 517, 769)
     }
 }

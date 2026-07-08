@@ -81,13 +81,15 @@ class TwUtilLink private constructor(
                     info("TWUtil.open(${ids.size} ids) returned $rc — serial not acquired")
                     return teardown(instance)
                 }
+                // open → start → addHandler is the order every reference client
+                // uses (KaierUtils, d51x/TWUtil, com.tw.bt) — keep it.
+                instance.javaClass.getMethod("start").invoke(instance)
                 val attached = attach(instance, receiver)
                 if (attached == null) {
                     info("no handler-attach method found — ${dumpMethods(cls)}")
                     return teardown(instance)
                 }
-                instance.javaClass.getMethod("start").invoke(instance)
-                info("TWUtil open(${ids.size} ids)=0, receiver via $attached, started")
+                info("TWUtil open(${ids.size} ids)=0, started, receiver via $attached")
                 return TwUtilLink(instance, if (attached.contains("tag")) HANDLER_TAG else null)
             } catch (e: Throwable) {
                 val cause = (e as? java.lang.reflect.InvocationTargetException)?.targetException ?: e

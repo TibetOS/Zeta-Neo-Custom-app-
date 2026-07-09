@@ -90,13 +90,43 @@ Radar (`canbox_park_process`) only while parking. So on a live Raise unit the
 CAN tab should show **repeating `what=0x41`** frames whose first payload byte
 alternates 0x01/0x02, plus `0x24` on gear/brake/light changes.
 
+## A SECOND Raise dialect — the type bytes are NOT universal
+
+`aerodomigue/esp32-canbox-nissan` (`docs/technical/RADIO_SEND.md`, a
+Toyota/Nissan-style Raise box) speaks the **same framing** (`0x2e|cmd|len|payload|
+checksum`, checksum = `(cmd+len+Σpayload) XOR 0xFF` = the one's-complement /
+Topway variant, matching our factory monitor's `2e 81 01 01 7c`) but a
+**different command map** from smartgauges. This is the whole point: **you must
+map from the live capture, not hardcode** — our box could be either dialect.
+
+| signal | smartgauges (VW) | esp32-nissan (Toyota/Raise) |
+|---|---|---|
+| doors | `0x41`/sub `0x01`, byte1 FL=**bit0**…trunk bit4 | `0x24` 1B, Driver=**bit7**, Pass bit6, RR bit5, RL bit4, trunk bit3 |
+| speed | `0x41`/sub `0x02` bytes 3-4 (×100 BE) | `0x7D`/sub `0x03` bytes 1-2 (×100 LE) |
+| fuel | `0x41`/sub `0x02` byte 12 | `0x22` instant / `0x23` avg (separate frames) |
+| RPM | `0x41`/sub `0x02` bytes 1-2 | `0x7D`/sub `0x0A` (RPM×4) |
+| lights | `0x24` bit2 | `0x7D`/sub `0x01` (parking 0x80, low 0x40, high 0x20, turns) |
+| odo | `0x41`/sub `0x02` bytes 9-11 | `0x7D`/sub `0x04` |
+| steering | `0x26`/`0x29` | `0x29` signed16 LE |
+| trip/range | — | `0x21` 7B |
+
+Note the collisions: `0x24` = *lights+reverse* in VW-PQ but *doors* in
+Toyota-Raise; `0x21` = *AC* in VW but *trip info* here. So **disambiguate by the
+`what` value AND payload length AND which signals actually toggle** when you
+open a door / shift to R — never assume a fixed table.
+
+Baud on the canbox↔MCU serial link is **38400 8N1** in both esp32 clients (and
+VwRaiseCanbox) — this is upstream of TWUtil (doesn't change our `open()` flag),
+but it's the number the factory unit expects from a Raise box, and a mismatch
+here is the classic "SWC works, sensors don't" symptom.
+
 ## Caveats (unverified against OUR unit)
 
 - This is the **VW**-targeted smartgauges build. The **frame layout is the
   Raise wire protocol** and should generalise, but the OEM Raise box in the
-  Outlander may use **different `type` numbers or subtypes**, and fuel/speed
-  scaling can differ per firmware. Treat as "what to look for," confirm against
-  the real CAN-tab dump.
+  Outlander may use **different `type` numbers or subtypes** (see the second
+  dialect above), and fuel/speed scaling can differ per firmware. Treat as
+  "what to look for," confirm against the real CAN-tab dump.
 - No Mitsubishi decoder exists in smartgauges `cars/` (LR2, Q3, Skoda Fabia,
   Toyota Premio, XC90 only) — the Outlander mapping is done by the OEM canbox,
   which we can't read; we only see its serial output.

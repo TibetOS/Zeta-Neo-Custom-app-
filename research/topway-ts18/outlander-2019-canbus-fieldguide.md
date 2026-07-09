@@ -84,12 +84,27 @@ cranking).
 
 ## If Step 1 finds no box at all
 
-Then the car was wired without CAN and the remedies from project memory apply:
-(2) buy an **RZC/Raise canbox for Outlander III** (plugs the harness, cheap);
-(3) DIY **smartgauges/canbox** on STM32 or an ESP32 CAN-gateway speaking Raise;
-(4) **ELM327 OBD-II** plan-B — and only *there* do the raw Outlander CAN IDs
-matter (0x318 gear, 0x236 steering, 0x32F ebrake; door/fuel IDs still need a
-capture on this ICE car — most public reverse-engineering is PHEV).
+Then the car was wired without CAN. Remedies:
+- **Buy the exact-fit box.** Concrete part: **XIBEIKE 16-pin Canbus Box for
+  Mitsubishi Outlander 2014-2020** (Amazon) — covers our 2019; also Bestycar
+  16-pin (Outlander/Pajero, incl. Rockford-amp variant). Wiring: the box's
+  **8-pin CAN plug goes into the head unit's 8-pin CAN socket** (this *is* the
+  "tiny white 8-pin plug"); the 16-pin side is plug-and-play to the factory
+  harness, no cutting.
+- **DIY a Raise gateway.** Working open-source implementations of the exact
+  `0x2e` Raise protocol the unit expects: **smartgauges/canbox** (STM32),
+  **aerodomigue/esp32-canbox-nissan** (ESP32, well-documented frames in
+  `docs/technical/RADIO_SEND.md`), **icarome/VwRaiseCanbox**. All emit **38400
+  8N1**. You'd map the Outlander's raw CAN → Raise frames yourself.
+- **ELM327 OBD-II** plan-B — and only *there* do the raw Outlander CAN IDs
+  matter (0x318 gear, 0x236 steering, 0x32F ebrake; door/fuel IDs still need a
+  capture on this ICE car — most public reverse-engineering is PHEV).
+
+**Prior-art note:** an all-GitHub sweep found **no existing TWUtil client that
+decodes vehicle CAN** — every TWUtil app uses it for radio/BT/aux only, and
+`"new TWUtil" door` returns 0 hits. So there's nothing to copy for the decode
+side; it must come from our own CAN-tab capture. Our own repo is now the top
+hit for "TS18 canbus door reverse" — we're at the public frontier here.
 
 ## Sources
 

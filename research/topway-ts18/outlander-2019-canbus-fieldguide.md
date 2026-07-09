@@ -9,7 +9,7 @@ steps produce nothing, no app change can help: the data isn't reaching the unit.
 
 ```
 Outlander CAN (split: front/comfort  ⟷ gateway ⟷  back/powertrain)
-        │  raw frames (0x318 gear, 0x32F ebrake, 0x236 steering, doors, fuel)
+        │  raw frames (0x154 fuel, 0x214/0x215 speed, 0x236 steering, 0x32F ebrake)
         ▼
    OEM CANbox behind radio  ── "tiny white 8-pin plug" ──┐   ← must be connected
         │  Raise/RZC serial protocol (0x2e|type|…)        │
@@ -97,8 +97,12 @@ Then the car was wired without CAN. Remedies:
   `docs/technical/RADIO_SEND.md`), **icarome/VwRaiseCanbox**. All emit **38400
   8N1**. You'd map the Outlander's raw CAN → Raise frames yourself.
 - **ELM327 OBD-II** plan-B — and only *there* do the raw Outlander CAN IDs
-  matter (0x318 gear, 0x236 steering, 0x32F ebrake; door/fuel IDs still need a
-  capture on this ICE car — most public reverse-engineering is PHEV).
+  matter. Verified on a genuine 2019 C-bus (`DEEP-RESEARCH-2026-07-09.md`):
+  **fuel = `0x154`** (bytes 0-3, `A*100/255`), **speed = `0x214`/`0x215`**
+  (bytes 0-1, `(A*256+B)/2`). NOT `0x318` for gear — that ID is verified-absent
+  from the 2019 C-bus; gear on ICE is still unmapped. `0x236` steering / `0x32F`
+  ebrake are present but not yet bit-decoded. Door/hood/trunk/ignition IDs still
+  need an in-car capture (public logs never toggled them).
 
 **Prior-art note:** an all-GitHub sweep found **no existing TWUtil client that
 decodes vehicle CAN** — every TWUtil app uses it for radio/BT/aux only, and

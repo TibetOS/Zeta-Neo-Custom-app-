@@ -135,11 +135,12 @@ class TwUtilLink private constructor(
             }
         }
 
-        // Every working reference client (KaierUtils, d51x/TWUtil, com.tw.bt)
-        // constructs no-arg; the (int) ctor takes a vendor *mode id*, not a CAN
-        // channel, and feeding it an invented index can SIGABRT in native code
-        // — a crash no JVM try/catch can catch. Prefer no-arg; only fall back to
-        // the (int) ctor, and only with mode 0, if no-arg is truly absent.
+        // Both ctors exist in the wild: Orbit/dvd-bt/KaierUtils construct no-arg,
+        // while fytFM and Radio-MST768 use the (int) ctor — its arg is a vendor
+        // *mode id* (Radio passes 1 = radio), NOT a CAN channel, so feeding it an
+        // invented index can SIGABRT in native code (uncatchable by JVM). Prefer
+        // no-arg; fall back to (int) with mode 0 only if no-arg is truly absent.
+        // See research/topway-ts18/community/README.md for the per-client split.
         private fun construct(cls: Class<*>, channel: Int): Any? {
             runCatching { return cls.getConstructor().newInstance() }
             runCatching { return cls.getConstructor(Int::class.javaPrimitiveType).newInstance(0) }

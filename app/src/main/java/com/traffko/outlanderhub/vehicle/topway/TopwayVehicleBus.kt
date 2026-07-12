@@ -245,6 +245,18 @@ class TopwayVehicleBus(
             33281.toShort(),  // app launch
             40720.toShort(),  // shutdown
             40732.toShort(),  // reverse activity
+            // Canbox frame-type window: the MCU forwards each canbox frame with
+            // the frame's type byte as the message `what`
+            // (research/topway-ts18/raise-protocol-decode.md), so CAN data is
+            // invisible without these ids in the subscription. Spans the
+            // door/drive/air/SWC/radar types of every dialect in the decode doc
+            // (Raise 0x41, Toyota-Raise 0x24/0x26/0x7D, RZC 0x28, VW-PQ
+            // 0x20–0x2A, Hiworld 0x41–0x45) while keeping the total at 29 —
+            // far under the native id-table size the 5120-id sweep overflowed.
+            0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2A,
+            0x30, 0x32, 0x36, 0x38,
+            0x41, 0x42, 0x43, 0x45,
+            0x7D, 0x81,
         )
     }
 }

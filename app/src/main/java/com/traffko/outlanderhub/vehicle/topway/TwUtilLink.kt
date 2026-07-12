@@ -51,7 +51,13 @@ class TwUtilLink private constructor(
     }
 
     companion object {
-        const val HANDLER_TAG = "outlanderhub"
+        // "radio", not our own name: the framework's sendHandler() routes every
+        // MCU push through getHandler("radio") with no fallback
+        // (research/topway-ts18/community/TWUtil-real.java:158), so any other tag
+        // receives nothing on that path. If the undecompiled pollEventFromNative
+        // path fans out to all tags instead (how KaierUtils works with its own
+        // tag), "radio" still receives — it wins under either dispatch.
+        const val HANDLER_TAG = "radio"
 
         /**
          * Flatten a received msg.obj into event payload lists. The firmware

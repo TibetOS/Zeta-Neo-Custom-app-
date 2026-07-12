@@ -142,6 +142,16 @@ class TopwayProbe(
          * vehicle/canbus ones are the community-reported names for the CAN app.
          */
         val KNOWN_TW_PACKAGES = listOf(
+            // The real CAN/vehicle owner on TS18 and its uid=1000 siblings, from
+            // the carinfoservice deep-dive (research/topway-ts18/): carinfoservice
+            // succeeds com.tw.car; com.tw.service hosts the platform-gated
+            // CommandService (ITWCommandAidl); carchoose is the CAN-TYPE chooser.
+            "com.tw.carinfoservice",
+            "com.tw.service",
+            "com.tw.reverse",
+            "com.tw.coreservice",
+            "com.tw.core",
+            "com.dofun.carsetting",
             "com.tw.carchoose",
             "com.tw.car",
             "com.tw.carapps",
@@ -156,6 +166,12 @@ class TopwayProbe(
 
         /** Subset of [KNOWN_TW_PACKAGES] worth a services/binder deep-inspect if present. */
         val VEHICLE_PACKAGES = setOf(
+            "com.tw.carinfoservice",
+            "com.tw.service",
+            "com.tw.reverse",
+            "com.tw.coreservice",
+            "com.tw.core",
+            "com.dofun.carsetting",
             "com.tw.carchoose",
             "com.tw.car",
             "com.tw.carapps",

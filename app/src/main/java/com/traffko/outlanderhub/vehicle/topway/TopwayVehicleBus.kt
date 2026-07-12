@@ -148,14 +148,12 @@ class TopwayVehicleBus(
         CrashReporter.breadcrumb("")
         _state.update { it.copy(connected = true) }
         emitInfo("TWUtil session LIVE — MCU messages appear as tw-can events; drive/press buttons and map what changes")
-        val rc = opened?.write(CAN_STATUS_ID, intArrayOf(STATUS_POLL))
-        emitInfo("CAN status poll write($CAN_STATUS_ID, $STATUS_POLL) rc=${rc ?: "no overload"}")
     }
 
     private suspend fun openWithTimeout(cls: Class<*>, ids: ShortArray, receiver: Any): TwUtilLink? =
         withTimeoutOrNull(OPEN_TIMEOUT_MS) {
             runInterruptible {
-                TwUtilLink.open(cls, TwUtilReader.CANBUS_CHANNEL, ids, TwUtilReader.SERIAL_BAUD, receiver, ::emitInfo)
+                TwUtilLink.open(cls, ids, OPEN_FLAG, receiver, ::emitInfo)
             }
         } ?: run {
             emitInfo("TWUtil open timed out after ${OPEN_TIMEOUT_MS}ms — serial held?")
@@ -225,20 +223,20 @@ class TopwayVehicleBus(
 
         const val OPEN_TIMEOUT_MS = 5000L
 
-        // "Send me current state" idiom shared by every reference client
-        // (volume 515/255, audio focus 769/255, Orbit's STATUS_POLL) — poking
-        // the CAN id with it is what the factory monitor's GET 0501 does.
-        const val CAN_STATUS_ID = 0x0501
-        const val STATUS_POLL = 255
+        // Second arg to TWUtil.open(ids, flag). Reference clients pass 0 (Orbit)
+        // or 115200 (dvd-bt) and both are accepted — it's an advisory flag, not
+        // the canbox↔MCU serial baud (that link is 38400, upstream of TWUtil).
+        const val OPEN_FLAG = 0
 
         // Curated subscription set. THE 5120-id sweep we opened with before was
         // the native SIGABRT: every working GitHub client (bphillips09/Orbit,
         // asb72/dvd-bt, d51x/KaierUtils) opens with a handful of ids — the
         // native layer copies them into a fixed-size table and a huge array
-        // overflows it. This is KaierUtils' proven `twutil_contexts` set plus
-        // the CAN/vehicle id (0x0501) and AUX status (517) we actually want.
+        // overflows it. This is KaierUtils' proven `twutil_contexts` set.
+        // No 0x0501 poke: that CAN-status idiom is FYT's, not Raise/Topway
+        // (research/topway-ts18/raise-protocol-decode.md) — on Raise, subscribe
+        // and watch, poke nothing.
         val OPEN_IDS = shortArrayOf(
-            0x0501,           // CAN / vehicle (factory monitor's GET 0501)
             513,              // key press
             514,              // sleep/wake
             515,              // volume

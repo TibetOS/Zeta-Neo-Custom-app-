@@ -76,7 +76,7 @@ class TwUtilLinkTest {
         LiveTw.calls.clear()
         LiveTw.constructed.clear()
         info.clear()
-        return TwUtilLink.open(LiveTw::class.java, 7, ids, 115200, Receiver(), info::add)
+        return TwUtilLink.open(LiveTw::class.java, ids, 115200, Receiver(), info::add)
     }
 
     @Test
@@ -108,7 +108,7 @@ class TwUtilLinkTest {
 
     @Test
     fun `write falls back to a wider overload padding with zeros`() {
-        val link = TwUtilLink.open(WriteThreeOnlyTw::class.java, 7, ids, 115200, Receiver(), info::add)!!
+        val link = TwUtilLink.open(WriteThreeOnlyTw::class.java, ids, 115200, Receiver(), info::add)!!
         assertEquals(0, link.write(517, intArrayOf()))
         assertEquals("write(517,0,0)", WriteThreeOnlyTw.last)
     }
@@ -116,7 +116,7 @@ class TwUtilLinkTest {
     @Test
     fun `setHandler is found when addHandler is absent`() {
         SetHandlerTw.attached = false
-        val link = TwUtilLink.open(SetHandlerTw::class.java, 7, ids, 115200, Receiver(), info::add)
+        val link = TwUtilLink.open(SetHandlerTw::class.java, ids, 115200, Receiver(), info::add)
         assertNotNull(info.joinToString(), link)
         assertTrue(SetHandlerTw.attached)
     }
@@ -125,7 +125,7 @@ class TwUtilLinkTest {
     fun `non-zero open reports and tears down`() {
         BusyTw.closed = false
         info.clear()
-        val link = TwUtilLink.open(BusyTw::class.java, 7, ids, 115200, Receiver(), info::add)
+        val link = TwUtilLink.open(BusyTw::class.java, ids, 115200, Receiver(), info::add)
         assertNull(link)
         assertTrue(info.joinToString(), info.any { it.contains("returned -1") })
         assertTrue("close() must run on failure", BusyTw.closed)
@@ -157,7 +157,7 @@ class TwUtilLinkTest {
     fun `missing attach method dumps the class surface and tears down`() {
         NoAttachTw.closed = false
         info.clear()
-        val link = TwUtilLink.open(NoAttachTw::class.java, 7, ids, 115200, Receiver(), info::add)
+        val link = TwUtilLink.open(NoAttachTw::class.java, ids, 115200, Receiver(), info::add)
         assertNull(link)
         assertTrue(info.joinToString(), info.any { it.contains("class surface") && it.contains("open") })
         assertTrue("close() must run when no attach method exists", NoAttachTw.closed)

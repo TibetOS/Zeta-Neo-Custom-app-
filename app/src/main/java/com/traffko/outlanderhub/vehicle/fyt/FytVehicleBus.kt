@@ -375,7 +375,10 @@ class FytVehicleBus(
             emitInfo("provider ${it.name.substringAfterLast('.')} auth=${it.authority} exported=${it.exported}")
         }
         info.services?.forEach {
-            emitInfo("service ${it.name.substringAfterLast('.')} exported=${it.exported}")
+            // .permission names the gate — a signature perm here confirms the
+            // "platform-signed consumer only" finding on carinfoservice live.
+            val perm = it.permission?.let { p -> " perm=${p.substringAfterLast('.')}" } ?: ""
+            emitInfo("service ${it.name.substringAfterLast('.')} exported=${it.exported}$perm")
         }
         info.receivers?.take(20)?.forEach {
             emitInfo("receiver ${it.name.substringAfterLast('.')} exported=${it.exported}")

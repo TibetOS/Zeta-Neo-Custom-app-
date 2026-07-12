@@ -89,7 +89,6 @@ class TwUtilLink private constructor(
          */
         fun open(
             cls: Class<*>,
-            channel: Int,
             ids: ShortArray,
             baud: Int,
             receiver: Any,
@@ -100,7 +99,7 @@ class TwUtilLink private constructor(
             // breadcrumb in the exported log is the only evidence of which step
             // aborted. Emit one before every vendor call.
             info("step: constructing ${cls.simpleName}")
-            val instance = construct(cls, channel)
+            val instance = construct(cls)
             if (instance == null) {
                 info("TWUtil has no usable constructor")
                 return null
@@ -141,7 +140,7 @@ class TwUtilLink private constructor(
         // invented index can SIGABRT in native code (uncatchable by JVM). Prefer
         // no-arg; fall back to (int) with mode 0 only if no-arg is truly absent.
         // See research/topway-ts18/community/README.md for the per-client split.
-        private fun construct(cls: Class<*>, channel: Int): Any? {
+        private fun construct(cls: Class<*>): Any? {
             runCatching { return cls.getConstructor().newInstance() }
             runCatching { return cls.getConstructor(Int::class.javaPrimitiveType).newInstance(0) }
             return null

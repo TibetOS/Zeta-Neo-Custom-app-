@@ -54,7 +54,10 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun setProjectionPackage(packageName: String?) {
-        context.dataStore.edit { it[Keys.PROJECTION_PACKAGE] = packageName ?: "" }
+        context.dataStore.edit {
+            if (packageName == null) it.remove(Keys.PROJECTION_PACKAGE)
+            else it[Keys.PROJECTION_PACKAGE] = packageName
+        }
     }
 
     suspend fun setProjectionAutoLaunch(enabled: Boolean) {

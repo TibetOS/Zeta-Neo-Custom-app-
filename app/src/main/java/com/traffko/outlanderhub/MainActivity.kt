@@ -13,8 +13,10 @@ import androidx.lifecycle.lifecycleScope
 import com.traffko.outlanderhub.apps.ProjectionApps
 import com.traffko.outlanderhub.ui.AppRoot
 import com.traffko.outlanderhub.ui.theme.OutlanderHubTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
 
@@ -42,11 +44,14 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             val settings = (application as OutlanderApp).settingsRepository.settings.first()
             if (!settings.projectionAutoLaunch) return@launch
-            val pkg = ProjectionApps.resolve(packageManager, settings.projectionPackage)
-                ?: return@launch
-            packageManager.getLaunchIntentForPackage(pkg)?.let {
-                startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            }
+            // PackageManager queries can block; keep them off the main thread
+            // during startup.
+            val intent = withContext(Dispatchers.IO) {
+                ProjectionApps.resolve(packageManager, settings.projectionPackage)
+                    ?.let { packageManager.getLaunchIntentForPackage(it) }
+            } ?: return@launch
+            // Never let a broken projection app crash-loop the launcher at boot.
+            runCatching { startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         }
     }
 

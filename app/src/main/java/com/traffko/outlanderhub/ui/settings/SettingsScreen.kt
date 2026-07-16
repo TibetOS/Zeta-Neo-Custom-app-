@@ -1,9 +1,13 @@
 package com.traffko.outlanderhub.ui.settings
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
@@ -37,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -79,6 +84,50 @@ fun SettingsScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                 subtitle = "For testing the UI without the car.",
                 selected = settings.source == VehicleSource.DEMO,
             ) { viewModel.setSource(VehicleSource.DEMO) }
+            Spacer(Modifier.height(10.dp))
+
+            val context = LocalContext.current
+            // Re-checked on resume so the warning tracks what the user actually
+            // did on the system permission dialog / app-settings screen.
+            val lifecycleOwner = LocalLifecycleOwner.current
+            var hasLocationPermission by remember { mutableStateOf(hasFineLocation(context)) }
+            DisposableEffect(lifecycleOwner) {
+                val observer = LifecycleEventObserver { _, event ->
+                    if (event == Lifecycle.Event.ON_RESUME) {
+                        hasLocationPermission = hasFineLocation(context)
+                    }
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+            }
+            val locationLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission()
+            ) { granted ->
+                hasLocationPermission = granted
+                if (granted) viewModel.retryGps()
+            }
+            SourceOption(
+                title = "GPS (no CAN needed)",
+                subtitle = "Speed, heading and altitude from the unit's GPS antenna. " +
+                    "Drives the dash, trip computer and overlay while the CAN decoder is unmapped.",
+                selected = settings.source == VehicleSource.GPS,
+            ) {
+                viewModel.setSource(VehicleSource.GPS)
+                if (!hasLocationPermission) {
+                    locationLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                }
+            }
+            if (settings.source == VehicleSource.GPS && !hasLocationPermission) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Location permission not granted — GPS can't deliver speed. Tap here to grant it.",
+                    color = Hue.Amber,
+                    fontSize = 13.sp,
+                    modifier = Modifier
+                        .padding(start = 38.dp)
+                        .pressable { locationLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION) },
+                )
+            }
             Spacer(Modifier.height(10.dp))
             SourceOption(
                 title = "Zeta CAN decoder (FYT)",
@@ -271,6 +320,10 @@ private fun SourceOption(
         }
     }
 }
+
+private fun hasFineLocation(context: Context): Boolean =
+    ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+        PackageManager.PERMISSION_GRANTED
 
 private fun overlayPermissionIntent(context: Context) = Intent(
     Settings.ACTION_MANAGE_OVERLAY_PERMISSION,

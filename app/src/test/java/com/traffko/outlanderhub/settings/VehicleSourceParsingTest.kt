@@ -10,6 +10,7 @@ class VehicleSourceParsingTest {
     fun `known names round-trip`() {
         assertEquals(VehicleSource.DEMO, parseVehicleSource("DEMO"))
         assertEquals(VehicleSource.FYT_CAN, parseVehicleSource("FYT_CAN"))
+        assertEquals(VehicleSource.GPS, parseVehicleSource("GPS"))
     }
 
     @Test

@@ -68,6 +68,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsRepo.setSource(source) }
     }
 
+    /** Called after the location permission dialog resolves in Setup. */
+    fun retryGps() = vehicles.retryGps()
+
     fun setShowDiagnostics(show: Boolean) {
         viewModelScope.launch { settingsRepo.setShowDiagnostics(show) }
     }

@@ -20,7 +20,14 @@ fitted with a **Zeta Neo 14** Android head unit (FYT platform).
   up amber; tap a row to assign its code to a vehicle signal **at runtime** —
   no rebuild. Includes a manual command sender and a log exporter.
 - **Setup** — switch between the *Demo* data source (simulated drive, for testing
-  the UI anywhere) and the *Zeta CAN decoder* source.
+  the UI anywhere), the *GPS* source (below) and the *Zeta CAN decoder* source.
+- **GPS source (works today, no CAN)** — real speed, heading and altitude from
+  the unit's GPS antenna. While the CAN decoder signals are still unmapped this
+  makes the app genuinely usable in the car: the dash speed numeral, the trip
+  computer and the floating overlay all run off GPS speed. Select it in
+  Setup → Vehicle data source → **GPS** and grant the location permission when
+  asked. Standstill jitter is clamped to a clean 0 km/h, and a lost fix
+  (tunnel, garage) blanks the speed instead of freezing it.
 - **Overlay** — optional floating vehicle pill (speed, fuel, alerts) drawn over
   other apps, most usefully over the CarPlay/ZLink projection where vehicle
   data is otherwise invisible. Tap to expand, drag to move; door/seatbelt/

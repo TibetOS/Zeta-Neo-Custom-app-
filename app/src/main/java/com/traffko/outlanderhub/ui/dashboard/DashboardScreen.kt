@@ -37,6 +37,8 @@ import com.traffko.outlanderhub.ui.theme.GaugeDanger
 import com.traffko.outlanderhub.ui.theme.GaugeGood
 import com.traffko.outlanderhub.ui.theme.GaugeWarn
 import com.traffko.outlanderhub.ui.theme.Hue
+import com.traffko.outlanderhub.vehicle.VehicleState
+import com.traffko.outlanderhub.vehicle.gps.compassPoint
 
 /**
  * Tesla-style driving view: one enormous speed numeral in the middle of a
@@ -54,7 +56,8 @@ fun DashboardScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
             Spacer(Modifier.width(10.dp))
             MicroLabel(if (vehicle.connected) vehicle.source.name.replace('_', ' ') else "Offline")
             Spacer(Modifier.weight(1f))
-            MicroLabel(vehicle.odometerKm?.let { "%,d km".format(it) } ?: "")
+            // Odometer is a CAN signal; on the GPS source show heading/altitude instead.
+            MicroLabel(vehicle.odometerKm?.let { "%,d km".format(it) } ?: gpsGlance(vehicle))
         }
 
         Row(
@@ -251,6 +254,11 @@ private fun PowerBar(
         MicroLabel(rpm?.let { "%,d rpm".format(it) } ?: "-- rpm")
     }
 }
+
+private fun gpsGlance(vehicle: VehicleState): String = buildList {
+    vehicle.headingDeg?.let { add("%s %.0f°".format(compassPoint(it), it)) }
+    vehicle.altitudeM?.let { add("%.0f m".format(it)) }
+}.joinToString("   ")
 
 private fun toneForRange(value: Float?, warn: Float, danger: Float): Color? = when {
     value == null -> null

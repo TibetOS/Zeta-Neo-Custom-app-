@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.SystemClock
 import com.traffko.outlanderhub.vehicle.fyt.FytVehicleBus
 import com.traffko.outlanderhub.vehicle.fyt.SignalKind
+import com.traffko.outlanderhub.vehicle.gps.GpsVehicleBus
 import com.traffko.outlanderhub.vehicle.topway.TopwayVehicleBus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,6 +37,7 @@ class VehicleRepository(
     private val demoBus = DemoVehicleBus()
     private val fytBus = FytVehicleBus(context, signalMap)
     private val topwayBus = TopwayVehicleBus(context, signalMap)
+    private val gpsBus = GpsVehicleBus(context)
 
     private var activeBus: VehicleBus = demoBus
     private var pumpJobs = mutableListOf<Job>()
@@ -72,6 +74,7 @@ class VehicleRepository(
             VehicleSource.DEMO -> demoBus
             VehicleSource.FYT_CAN -> fytBus
             VehicleSource.TOPWAY_TW -> topwayBus
+            VehicleSource.GPS -> gpsBus
         }
         _activeSource.value = source
         activeBus.start()
@@ -106,6 +109,15 @@ class VehicleRepository(
      * the persisted-source replay, or the crash-loop guard is defeated.
      */
     fun rearmTopway() = topwayBus.rearm()
+
+    /**
+     * Re-attempt GPS registration after the location permission dialog — the
+     * bus is a no-op to start while unregistered, so this is safe to call
+     * whenever the grant might have just happened.
+     */
+    fun retryGps() {
+        if (activeBus === gpsBus) gpsBus.start()
+    }
 
     fun clearEventLog() {
         synchronized(logLock) {

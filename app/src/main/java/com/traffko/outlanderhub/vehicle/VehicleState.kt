@@ -1,6 +1,6 @@
 package com.traffko.outlanderhub.vehicle
 
-enum class VehicleSource { DEMO, FYT_CAN, TOPWAY_TW }
+enum class VehicleSource { DEMO, FYT_CAN, TOPWAY_TW, GPS }
 
 data class DoorState(
     val frontLeft: Boolean = false,
@@ -42,6 +42,10 @@ data class VehicleState(
     val doors: DoorState = DoorState(),
     val climate: ClimateState = ClimateState(),
     val tirePressuresKpa: List<Float?> = listOf(null, null, null, null),
+    // Populated by the GPS source only; null on CAN/demo sources.
+    val headingDeg: Float? = null,
+    val altitudeM: Float? = null,
+    val gpsAccuracyM: Float? = null,
 )
 
 /**

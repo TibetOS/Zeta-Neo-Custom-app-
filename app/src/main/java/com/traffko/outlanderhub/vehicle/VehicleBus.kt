@@ -8,6 +8,8 @@ import kotlinx.coroutines.flow.StateFlow
  *  - [DemoVehicleBus]: simulated data for developing/testing the UI off the car.
  *  - [com.traffko.outlanderhub.vehicle.fyt.FytVehicleBus]: real data from the
  *    Zeta Neo (FYT platform) CAN-decoder service.
+ *  - [com.traffko.outlanderhub.vehicle.gps.GpsVehicleBus]: speed/heading/altitude
+ *    from the unit's GPS — works before the CAN decoder is mapped.
  */
 interface VehicleBus {
     val state: StateFlow<VehicleState>

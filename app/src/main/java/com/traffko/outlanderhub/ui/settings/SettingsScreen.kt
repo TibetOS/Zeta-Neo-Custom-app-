@@ -94,7 +94,11 @@ fun SettingsScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
             DisposableEffect(lifecycleOwner) {
                 val observer = LifecycleEventObserver { _, event ->
                     if (event == Lifecycle.Event.ON_RESUME) {
-                        hasLocationPermission = hasFineLocation(context)
+                        val granted = hasFineLocation(context)
+                        // Granted from the system app-settings screen (not our
+                        // dialog): kick the bus, it gave up while unpermitted.
+                        if (granted && !hasLocationPermission) viewModel.retryGps()
+                        hasLocationPermission = granted
                     }
                 }
                 lifecycleOwner.lifecycle.addObserver(observer)

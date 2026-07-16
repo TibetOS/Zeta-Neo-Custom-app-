@@ -39,7 +39,11 @@ import kotlinx.coroutines.launch
  * disconnected and says so on the diagnostics log. [start] is idempotent and
  * re-checks the permission, so a retry after granting just works.
  */
-class GpsVehicleBus(private val context: Context) : VehicleBus {
+class GpsVehicleBus(context: Context) : VehicleBus {
+
+    // Application context: this bus lives as long as the repository, and must
+    // not pin an Activity if one is ever passed in.
+    private val context = context.applicationContext
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var staleJob: Job? = null
@@ -134,7 +138,11 @@ class GpsVehicleBus(private val context: Context) : VehicleBus {
     private fun onFix(location: Location) {
         val nowMs = SystemClock.elapsedRealtime()
         val prev = lastLocation
-        val dtMs = if (lastFixAtMs == 0L) 0L else nowMs - lastFixAtMs
+        // dt from the fixes' own hardware timestamps, not receive time: queued
+        // callbacks can arrive back-to-back and a near-zero receive delta would
+        // fabricate a speed spike in the fallback path.
+        val dtMs = if (prev == null) 0L
+        else (location.elapsedRealtimeNanos - prev.elapsedRealtimeNanos) / 1_000_000L
         val rawKmh = when {
             location.hasSpeed() -> location.speed * MPS_TO_KMH
             prev != null && dtMs > 0 -> fallbackSpeedKmh(location.distanceTo(prev), dtMs)
@@ -159,11 +167,13 @@ class GpsVehicleBus(private val context: Context) : VehicleBus {
                 timestampMs = System.currentTimeMillis(),
                 channel = "gps",
                 code = CODE_FIX,
+                // NaN for absent readings — Location getters return 0.0 when
+                // unset, which would read as a real measurement in the log.
                 floats = listOf(
-                    speedKmh ?: -1f,
-                    location.bearing,
-                    location.altitude.toFloat(),
-                    location.accuracy,
+                    speedKmh ?: Float.NaN,
+                    if (location.hasBearing()) location.bearing else Float.NaN,
+                    if (location.hasAltitude()) location.altitude.toFloat() else Float.NaN,
+                    if (location.hasAccuracy()) location.accuracy else Float.NaN,
                 ),
             )
         )

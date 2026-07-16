@@ -29,6 +29,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,7 +49,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.traffko.outlanderhub.BuildConfig
 import com.traffko.outlanderhub.MainViewModel
+import com.traffko.outlanderhub.OutlanderApp
 import com.traffko.outlanderhub.UpdateStatus
+import com.traffko.outlanderhub.apps.LaunchableApp
+import com.traffko.outlanderhub.apps.ProjectionApps
 import com.traffko.outlanderhub.ui.components.MicroLabel
 import com.traffko.outlanderhub.ui.components.glassPanel
 import com.traffko.outlanderhub.ui.components.pressable
@@ -233,6 +237,82 @@ fun SettingsScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                 .glassPanel()
                 .padding(22.dp),
         ) {
+            MicroLabel("CarPlay / projection")
+            Spacer(Modifier.height(14.dp))
+
+            val context = LocalContext.current
+            val appsRepo = (context.applicationContext as OutlanderApp).installedAppsRepository
+            var apps by remember { mutableStateOf<List<LaunchableApp>>(emptyList()) }
+            LaunchedEffect(Unit) { apps = appsRepo.loadApps() }
+            val resolved = remember(apps, settings.projectionPackage) {
+                ProjectionApps.pick(apps.map { it.packageName }.toSet(), settings.projectionPackage)
+                    ?.let { pkg -> apps.firstOrNull { it.packageName == pkg } }
+            }
+            var pickerOpen by remember { mutableStateOf(false) }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Projection app", fontSize = 17.sp, color = Hue.TextPrimary)
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        when {
+                            resolved == null ->
+                                "No known client found — pick the app CarPlay runs in."
+                            settings.projectionPackage == null ->
+                                "Auto-detected: ${resolved.label}. Shown as the CarPlay button on Home."
+                            else ->
+                                "${resolved.label}. Shown as the CarPlay button on Home."
+                        },
+                        color = Hue.TextTertiary,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                    )
+                }
+                Text(
+                    if (pickerOpen) "Close" else "Change",
+                    fontSize = 14.sp,
+                    color = Hue.BlueBright,
+                    modifier = Modifier.pressable { pickerOpen = !pickerOpen },
+                )
+            }
+            if (pickerOpen) {
+                Spacer(Modifier.height(8.dp))
+                PickerRow("Auto-detect", selected = settings.projectionPackage == null) {
+                    viewModel.setProjectionPackage(null)
+                    pickerOpen = false
+                }
+                apps.forEach { app ->
+                    PickerRow(app.label, selected = app.packageName == settings.projectionPackage) {
+                        viewModel.setProjectionPackage(app.packageName)
+                        pickerOpen = false
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Open on startup", fontSize = 17.sp, color = Hue.TextPrimary)
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        "Jump straight into the projection app when the unit boots.",
+                        color = Hue.TextTertiary,
+                        fontSize = 13.sp,
+                    )
+                }
+                TeslaSwitch(
+                    checked = settings.projectionAutoLaunch,
+                    onToggle = { viewModel.setProjectionAutoLaunch(it) },
+                )
+            }
+        }
+
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .glassPanel()
+                .padding(22.dp),
+        ) {
             MicroLabel("About")
             Spacer(Modifier.height(8.dp))
             Text(
@@ -323,6 +403,20 @@ private fun SourceOption(
             Text(subtitle, color = Hue.TextTertiary, fontSize = 13.sp, lineHeight = 18.sp)
         }
     }
+}
+
+/** One selectable line in the projection-app picker. */
+@Composable
+private fun PickerRow(label: String, selected: Boolean, onSelect: () -> Unit) {
+    Text(
+        label,
+        fontSize = 15.sp,
+        color = if (selected) Hue.BlueBright else Hue.TextSecondary,
+        modifier = Modifier
+            .fillMaxWidth()
+            .pressable(onSelect)
+            .padding(vertical = 8.dp),
+    )
 }
 
 private fun hasFineLocation(context: Context): Boolean =

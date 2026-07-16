@@ -11,6 +11,12 @@ fitted with a **Zeta Neo 14** Android head unit (FYT platform).
   signal), door-open warning, and a grid of all installed apps. The app
   registers as an Android HOME activity, so it can be chosen as the default
   launcher.
+- **CarPlay quick-launch** — a dedicated button on Home opens the CarPlay/
+  projection app (ZLink auto-detected; any app can be pinned in
+  Setup → CarPlay). An optional *open on startup* toggle drops straight into
+  the projection when the unit boots — combined with the overlay pill this
+  makes CarPlay-first use seamless: boot → CarPlay, with live vehicle data
+  floating on top.
 - **Dash** — live gauges: speed, RPM (with redline zone), coolant temperature,
   battery voltage, fuel, odometer, gear.
 - **Car** — body status: doors/trunk, handbrake, seatbelt, climate readout and

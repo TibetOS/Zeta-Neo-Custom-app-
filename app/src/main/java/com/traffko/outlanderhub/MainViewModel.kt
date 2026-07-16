@@ -79,6 +79,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsRepo.setOverlayEnabled(enabled) }
     }
 
+    /** null pins nothing — auto-detect a known projection client. */
+    fun setProjectionPackage(packageName: String?) {
+        viewModelScope.launch { settingsRepo.setProjectionPackage(packageName) }
+    }
+
+    fun setProjectionAutoLaunch(enabled: Boolean) {
+        viewModelScope.launch { settingsRepo.setProjectionAutoLaunch(enabled) }
+    }
+
     fun assignSignal(code: Int, kind: SignalKind?) {
         viewModelScope.launch { signalMapRepo.assign(code, kind) }
     }

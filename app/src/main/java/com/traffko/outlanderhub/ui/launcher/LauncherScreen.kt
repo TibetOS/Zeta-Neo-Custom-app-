@@ -47,6 +47,7 @@ import com.google.accompanist.drawablepainter.rememberDrawablePainter
 import com.traffko.outlanderhub.MainViewModel
 import com.traffko.outlanderhub.OutlanderApp
 import com.traffko.outlanderhub.apps.LaunchableApp
+import com.traffko.outlanderhub.apps.ProjectionApps
 import com.traffko.outlanderhub.ui.components.MicroLabel
 import com.traffko.outlanderhub.ui.components.PulseDot
 import com.traffko.outlanderhub.ui.components.glassPanel
@@ -94,6 +95,12 @@ fun LauncherScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
 
     val vehicle by viewModel.vehicleState.collectAsStateWithLifecycle()
     val trip by viewModel.trip.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
+
+    val projectionApp = remember(apps, settings.projectionPackage) {
+        ProjectionApps.pick(apps.map { it.packageName }.toSet(), settings.projectionPackage)
+            ?.let { pkg -> apps.firstOrNull { it.packageName == pkg } }
+    }
 
     Row(modifier) {
         // Left: clock + vehicle glance
@@ -122,6 +129,11 @@ fun LauncherScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
             Spacer(Modifier.height(16.dp))
 
             TripCard(trip, onReset = viewModel::resetTrip)
+
+            if (projectionApp != null) {
+                Spacer(Modifier.height(16.dp))
+                ProjectionButton(projectionApp) { appsRepo.launch(projectionApp) }
+            }
 
             Spacer(Modifier.weight(1f))
 
@@ -208,6 +220,40 @@ private fun Clock() {
         fontSize = 16.sp,
         color = Hue.TextSecondary,
     )
+}
+
+/**
+ * One-tap entry into the CarPlay/projection app — the head unit's primary
+ * use, so it gets a dedicated button instead of a hunt through the app grid.
+ */
+@Composable
+private fun ProjectionButton(app: LaunchableApp, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .pressable(onClick)
+            .glassPanel()
+            .padding(horizontal = 18.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Image(
+            painter = rememberDrawablePainter(app.icon),
+            contentDescription = app.label,
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(11.dp)),
+        )
+        Spacer(Modifier.width(14.dp))
+        Column {
+            Text(
+                "CarPlay",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Hue.TextPrimary,
+            )
+            Text(app.label, fontSize = 12.sp, color = Hue.TextTertiary)
+        }
+    }
 }
 
 /** Odometer-independent trip stats, integrated from speed samples. */

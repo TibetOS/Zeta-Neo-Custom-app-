@@ -5,6 +5,9 @@
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <!-- Update check against GitHub Releases (Setup → About). -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- GPS vehicle-data source: speed/heading/altitude without the CAN decoder. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!-- Bluetooth for a future OBD fallback data source. -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
